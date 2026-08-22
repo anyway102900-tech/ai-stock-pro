@@ -534,11 +534,14 @@ def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_
         annual_rows.append(
             f"| **{row.get('year')}** | ￦{row.get('revenue')} | ￦{row.get('op_income')} | ￦{row.get('net_income')} | **{row.get('op_margin')}** | **{row.get('roe')}** | {row.get('debt_ratio')} | ￦{row.get('eps')} | **{row.get('per')}** |"
         )
-    annual_table_str = "\n".join(annual_rows) if annual_rows else f"| **2025년** | ￦15,800 | ￦2,150 | ￦1,750 | 13.6% | {fin.get('roe')}% | {fin.get('debt_ratio')} | ￦4,120 | {market.get('pe_ratio')}배 |"
+    annual_table_str = "\n".join(annual_rows) if annual_rows else "| **2025년** | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |"
     
-    p = safe_num(market.get('current_price'), 50000)
-    h = safe_num(market.get('high_52w'), 70000)
-    l = safe_num(market.get('low_52w'), 40000)
+    p = safe_num(market.get('current_price'), 0)
+    h = safe_num(market.get('high_52w'), 0)
+    l = safe_num(market.get('low_52w'), 0)
+
+    p_str = f"￦{p:,.0f}" if p > 0 else "N/A"
+    hl_str = f"￦{h:,.0f} / ￦{l:,.0f}" if h > 0 and l > 0 else "N/A"
     
     return f"""# 🏢 [{symbol}] 팩트체크 정밀 투자 리포트
 공식 출처: **영웅문 HTS & KRX 공식망 / 금융감독원 Open DART / FnGuide (2026-08 기준)**
@@ -553,7 +556,7 @@ def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_
 | **52주 최고 / 최저** | ￦{h:,} / ￦{l:,} | 한국거래소(KRX) |
 | **시가총액** | **{market.get('market_cap_formatted', 'N/A')}** | 한국거래소(KRX) |
 | **PER / PBR** | **{market.get('pe_ratio', 12.5)}배** / **{market.get('pb_ratio', 1.25)}배** | FnGuide 공인 밸류에이션 |
-| **배당수익률 / EPS** | **{market.get('dividend_yield', 2.0)}%** / **￦{safe_fmt(market.get('eps', 5000))}** | DART 사업보고서 |
+| **배당수익률 / EPS** | **{str(market.get('dividend_yield', 'N/A')).rstrip('%')}%** / **￦{safe_fmt(market.get('eps', 'N/A'))}** | DART 사업보고서 |
 
 ---
 

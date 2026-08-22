@@ -11,6 +11,9 @@ market_data.py
 - AI/반도체: 리노공업, HPSP, 이수페타시스, SK텔레콤, 삼성SDS, 한미반도체, 주성엔지니어링, KT, DB하이텍, SFA, LGU+, 삼성전자
 """
 
+import os
+import re
+import json
 import requests
 import FinanceDataReader as fdr
 import yfinance as yf
@@ -132,10 +135,25 @@ KNOWN_TICKERS = {
     "구글": "GOOGL",
 }
 
+# KRX 2,720개 전 종목 마스터 로딩
+try:
+    master_path = os.path.join(os.path.dirname(__file__), "krx_stocks.json")
+    if os.path.exists(master_path):
+        with open(master_path, "r", encoding="utf-8") as f:
+            krx_dict = json.load(f)
+            KNOWN_TICKERS.update(krx_dict)
+except Exception as e:
+    print(f"[KRX MASTER LOAD ERROR] {e}")
+
 def resolve_ticker(symbol_or_name: str) -> str:
     cleaned = symbol_or_name.strip()
     if cleaned in KNOWN_TICKERS:
         return KNOWN_TICKERS[cleaned]
+    # 공백 제거 버전 매칭
+    no_space = cleaned.replace(" ", "")
+    if no_space in KNOWN_TICKERS:
+        return KNOWN_TICKERS[no_space]
+
     if len(cleaned) == 6 and cleaned.isdigit():
         return cleaned
     if cleaned.endswith(".KS") or cleaned.endswith(".KQ"):
