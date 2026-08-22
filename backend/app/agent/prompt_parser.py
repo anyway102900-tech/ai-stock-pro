@@ -60,14 +60,19 @@ def parse_rice_prompt(prompt_text: str) -> Dict[str, Any]:
 
     # 3. 분석 대상 단일/대표 종목 추출
     symbol = None
-    # '분석 대상:', '분석 대상 :', '종목명:' 등의 다양한 패턴 매칭
-    symbol_match = re.search(r'(?:분석\s*대상|종목명|대상\s*종목|기업명|구성\s*종목)[:\s]*([가-힣A-Za-z0-9\s,]+)', prompt_text)
-    if symbol_match:
-        cand_line = symbol_match.group(1).split('\n')[0].strip()
-        # 콤마로 나뉘어 있으면 첫 번째 대표 종목 선택
-        first_cand = cand_line.split(',')[0].strip()
-        if first_cand and first_cand not in STOPWORDS and len(first_cand) > 1:
-            symbol = first_cand
+    # 6자리 종목코드 패턴 (예: 214370, 005930)
+    code_match = re.search(r'\b([0-9]{6})\b', prompt_text)
+    if code_match:
+        symbol = code_match.group(1)
+
+    # '분석 대상:', '분석 대상 :', '종목명:', '대상:' 등의 다양한 패턴 매칭
+    if not symbol:
+        symbol_match = re.search(r'(?:분석\s*대상|종목명|대상\s*종목|기업명|구성\s*종목)[:\s]*([가-힣A-Za-z0-9\s,]+)', prompt_text)
+        if symbol_match:
+            cand_line = symbol_match.group(1).split('\n')[0].strip()
+            first_cand = cand_line.split(',')[0].strip()
+            if first_cand and first_cand not in STOPWORDS and len(first_cand) > 1:
+                symbol = first_cand
 
     if not symbol:
         # ETF 전용 패턴 우선 검사
@@ -80,7 +85,7 @@ def parse_rice_prompt(prompt_text: str) -> Dict[str, Any]:
         known_candidates = [
             "KODEX 방산TOP10", "TIGER 미국S&P500", "ACE 미국S&P500", "TIGER 미국나스닥100",
             "KODEX 반도체", "TIGER 2차전지테마", "KODEX 200", "ACE 미국30년국채액티브",
-            "NAVER", "네이버", "카카오", "두산에너빌리티", "HD현대일렉트릭", "한화솔루션", "씨에스윈드", 
+            "케어젠", "NAVER", "네이버", "카카오", "두산에너빌리티", "HD현대일렉트릭", "한화솔루션", "씨에스윈드", 
             "LS ELECTRIC", "효성중공업", "한국전력", "LG에너지솔루션", "포스코홀딩스", "POSCO홀딩스", "에코프로비엠", 
             "에코프로", "삼성SDI", "삼성바이오로직스", "셀트리온", "알테오젠", "유한양행", "한화에어로스페이스", "현대로템", 
             "한국항공우주", "리노공업", "한미반도체", "삼성전자", "SK하이닉스", "SK텔레콤", "KT", 
@@ -92,6 +97,13 @@ def parse_rice_prompt(prompt_text: str) -> Dict[str, Any]:
                 if any(etf_p in cand for etf_p in ["KODEX", "TIGER", "ACE", "SOL", "PLUS", "ARIRANG"]):
                     menu_type = "ETF"
                 break
+
+    # 자연어 입력에서 첫 단어가 종목명인 경우 (예: "케어젠 분석해줘")
+    if not symbol:
+        first_word = prompt_text.strip().split()[0] if prompt_text.strip() else ""
+        first_word_clean = re.sub(r'[^가-힣A-Za-z0-9]', '', first_word)
+        if len(first_word_clean) >= 2 and first_word_clean not in STOPWORDS:
+            symbol = first_word_clean
 
     # 기본 대표 종목 할당
     if not symbol:

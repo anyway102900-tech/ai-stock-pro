@@ -53,6 +53,7 @@ KNOWN_TICKERS = {
     "포스코퓨처엠": "003670",
 
     # 💊 바이오 / 헬스케어
+    "케어젠": "214370",
     "삼성바이오로직스": "207940",
     "셀트리온": "068270",
     "알테오젠": "196170",
@@ -126,6 +127,21 @@ def resolve_ticker(symbol_or_name: str) -> str:
         return cleaned
     if cleaned.endswith(".KS") or cleaned.endswith(".KQ"):
         return cleaned[:6]
+
+    # 미등록 종목인 경우 네이버 증권 자동완성 API로 6자리 코드 검색
+    try:
+        url = f"https://ac.finance.naver.com/ac?q={cleaned}&target=stock"
+        res = requests.get(url, timeout=2).json()
+        items = res.get("items", [[]])[0]
+        if items:
+            for item in items:
+                # [종목명, 코드, ...]
+                if len(item) >= 2 and len(item[1]) == 6 and item[1].isdigit():
+                    KNOWN_TICKERS[cleaned] = item[1]
+                    return item[1]
+    except Exception:
+        pass
+
     return cleaned
 
 def _is_krx(code: str) -> bool:
