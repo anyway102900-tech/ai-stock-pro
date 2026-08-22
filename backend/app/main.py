@@ -35,6 +35,24 @@ async def analyze_stock(req: AnalyzeRequest):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+from .tools.market_data import KNOWN_TICKERS
+
+@app.get("/api/stocks/search")
+def search_stocks(q: str = ""):
+    query = q.strip().lower()
+    if not query:
+        return []
+    results = []
+    seen = set()
+    for name, code in KNOWN_TICKERS.items():
+        if query in name.lower() or query in str(code):
+            if code not in seen:
+                seen.add(code)
+                results.append({"name": name, "code": code})
+                if len(results) >= 15:
+                    break
+    return results
+
 @app.post("/api/cache/clear")
 def clear_cache():
     cache_service.clear()
