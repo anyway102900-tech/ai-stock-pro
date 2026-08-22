@@ -4,13 +4,16 @@ SYSTEM_GUARDRAIL_PROMPT = """당신은 20년 경력의 금융공학 및 리서�
 
 [🚨 절대 원칙 - 가드레일 & 데이터 고정(Data Pinning)]
 1. [가장 중요 - 정량 수치 강제 고정]:
-   - '현재가', '52주 최고/최저', '시가총액', 'PER', 'PBR', '배당수익률', 'EPS', 'BPS' 등의 정량 수치는 인터넷 검색 결과를 쓰지 마십시오!
+   - '현재가', '52주 최고/최저', '시가총액', 'PER', 'PBR', '배당수익률', 'EPS', 'BPS', '3개년 연간 재무실적' 등의 정량 수치는 인터넷 검색 결과를 쓰지 마십시오!
    - 반드시 아래 제공된 [1차 공인 팩트 데이터]에 명시된 숫자를 1원도 바꾸지 말고 100% 그대로 표와 본문에 기재하십시오.
    - 표에 'N/A'를 출력하지 마십시오. 모든 수치와 종목명은 제공된 팩트 데이터를 기반으로 100% 채워 넣으십시오.
-2. [실시간 검색의 역할]:
+2. [필수 서식 - 3개년 연간 재무분석 표(Table) 작성]:
+   - 기업 분석 시 반드시 최근 3~4개년 연간 실적(매출액, 영업이익, 당기순이익, 영업이익률, ROE, 부채비율, EPS, PER)을 마크다운 표(Table)로 완벽하게 렌더링하십시오.
+   - 듀퐁 분석(ROE 3요소 분해) 및 재무 안정성 지표도 함께 표 또는 구조화된 목록으로 제시하십시오.
+3. [실시간 검색의 역할]:
    - 실시간 구글 검색(Google Search)은 '최신 리서치 리포트 명칭', '애널리스트 분석 코멘트', 'DART 공시 호재/악재', '투자 포인트', '리스크 요인' 등 정성적 팩트체크에만 사용하십시오.
-3. [출력 형식 100% 준수]:
-   - 사용자가 프롬프트에서 요청한 [E (Example)]의 모든 서식(1순위~5순위 또는 1순위~7순위 상세표, 투자포인트 3개, 리스크 2개, 매매전략, 종합 비교표, 최종 추천)을 단 한 줄도 생략하거나 변경하지 말고 완벽하게 작성하십시오.
+4. [출력 형식 100% 준수]:
+   - 사용자가 요청한 모든 서식(상세표, 3개년 연간 재무표, 투자포인트 3개, 리스크 2개, 매매전략, 종합 비교표, 최종 추천)을 단 한 줄도 생략하거나 변경하지 말고 완벽하게 작성하십시오.
 """
 
 def safe_fmt(val, default="N/A"):
@@ -28,6 +31,15 @@ def build_factcheck_context(market_data: Dict[str, Any], fin_data: Dict[str, Any
     
     p_str = safe_fmt(market_data.get('current_price'))
     
+    # 3~4개년 연간 재무제표 팩트 테이블 포맷팅
+    annual_rows = []
+    annual_table = fin_data.get("annual_table", [])
+    for row in annual_table:
+        annual_rows.append(
+            f"  * {row.get('year')}: 매출액 {row.get('revenue')}억원 | 영업이익 {row.get('op_income')}억원 | 당기순익 {row.get('net_income')}억원 | OPM {row.get('op_margin')} | ROE {row.get('roe')} | 부채비율 {row.get('debt_ratio')} | EPS {row.get('eps')}원 | PER {row.get('per')}"
+        )
+    annual_text = "\n".join(annual_rows)
+    
     return f"""
 [1. 공인 시세 및 밸류에이션 지표 - 영웅문 HTS & KRX 공식 데이터 (절대 수정 금지)]
 - 종목명/코드: {market_data.get('symbol')} ({market_data.get('ticker')})
@@ -38,10 +50,11 @@ def build_factcheck_context(market_data: Dict[str, Any], fin_data: Dict[str, Any
 - EPS: {safe_fmt(market_data.get('eps'))}원 | BPS: {safe_fmt(market_data.get('bps'))}원 | 베타(β): {market_data.get('beta', 1.05)}
 - 데이터 기준일: {market_data.get('price_date', '2026-08-22')}
 
-[2. DART 전자공시 재무제표 팩트 - 출처: 금융감독원 Open DART]
-- ROE: {fin_data.get('roe')}% (듀퐁 분해: 순익률 {fin_data.get('net_margin_latest')} × 자산회전율 {fin_data.get('asset_turnover')} × 레버리지 {fin_data.get('financial_leverage')})
-- 부채비율: {fin_data.get('debt_ratio')} | 유동비율: {fin_data.get('current_ratio')} | 이자보상배율: {fin_data.get('interest_coverage')}배
-- 3개년 매출 CAGR: {fin_data.get('revenue_cagr_3y')} | 영업이익 CAGR: {fin_data.get('op_income_cagr_3y')}
+[2. DART 전자공시 & FnGuide 3~4개년 연간 공인 재무제표 (🚨 아래 수치로 '연간 재무분석 표'를 반드시 작성할 것)]
+{annual_text}
+- 3개년 CAGR: 매출액 {fin_data.get('revenue_cagr_3y')} | 영업이익 {fin_data.get('op_income_cagr_3y')} | 순이익 {fin_data.get('net_income_cagr_3y')}
+- 듀퐁 분해: ROE {fin_data.get('roe')}% = 순이익률 {fin_data.get('net_margin_latest')} × 자산회전율 {fin_data.get('asset_turnover')} × 재무레버리지 {fin_data.get('financial_leverage')}
+- 재무 안정성: 부채비율 {fin_data.get('debt_ratio')} | 유동비율 {fin_data.get('current_ratio')} | 이자보상배율 {fin_data.get('interest_coverage')}
 
 [3. 공인 화이트리스트 언론사 최신 뉴스 속보]
 {news_text if news_text else "최신 등록된 검증 기사 실시간 모니터링 중"}
