@@ -41,6 +41,11 @@ export default function ReportViewer({ report, sources = [], isAnalyzing }) {
             <ReactMarkdown 
               remarkPlugins={[remarkGfm]}
               components={{
+                table: ({ node, ...props }) => (
+                  <div className="table-responsive">
+                    <table {...props} />
+                  </div>
+                ),
                 a: ({ node, ...props }) => (
                   <a {...props} target="_blank" rel="noopener noreferrer">
                     {props.children} <ExternalLink size={12} style={{ display: 'inline', verticalAlign: 'middle' }} />

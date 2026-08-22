@@ -464,3 +464,150 @@ body {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Table Responsive Wrapper */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 16px 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.table-responsive table {
+  margin: 0;
+  min-width: 500px;
+}
+
+/* ==========================================================
+   📱 Mobile & Tablet Responsive Media Queries
+   ========================================================== */
+
+/* 태블릿 및 대형 모바일 (Max 768px) */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 12px 14px;
+    gap: 16px;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .header-status-panel {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+
+  .status-chip {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+  }
+
+  .glass-card {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .card-header-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .prompt-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .btn-primary {
+    width: 100%;
+    justify-content: center;
+    padding: 14px;
+    font-size: 1rem;
+  }
+
+  .console-body {
+    padding: 12px;
+    min-height: 160px;
+    max-height: 240px;
+    font-size: 0.78rem;
+  }
+
+  .log-entry {
+    gap: 6px;
+  }
+
+  .log-timestamp {
+    min-width: 56px;
+    font-size: 0.7rem;
+  }
+
+  .report-content {
+    padding: 16px;
+  }
+
+  .report-content h1 { font-size: 1.25rem; }
+  .report-content h2 { font-size: 1.1rem; }
+  .report-content h3 { font-size: 0.98rem; }
+
+  .source-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  }
+
+  .source-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+}
+
+/* 초소형 모바일 기기 (Max 480px) */
+@media (max-width: 480px) {
+  .brand-icon-wrapper {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+
+  .brand-icon-wrapper svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .brand-title {
+    font-size: 1.1rem;
+  }
+
+  .brand-badge {
+    font-size: 0.58rem;
+    padding: 1px 5px;
+  }
+
+  .brand-subtitle {
+    font-size: 0.75rem;
+  }
+
+  .prompt-textarea {
+    min-height: 120px;
+    padding: 12px;
+    font-size: 0.85rem;
+  }
+
+  .report-content th, 
+  .report-content td {
+    padding: 8px 10px;
+    font-size: 0.78rem;
+  }
+}
+

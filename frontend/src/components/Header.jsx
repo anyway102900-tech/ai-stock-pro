@@ -9,7 +9,7 @@ export default function Header({ status = 'ready' }) {
           <ShieldCheck size={26} />
         </div>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
             <h1 className="brand-title">AI 주식분석 PRO</h1>
             <span className="brand-badge">FACT-CHECK AGENT</span>
           </div>
