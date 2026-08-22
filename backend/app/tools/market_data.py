@@ -71,7 +71,8 @@ KNOWN_TICKERS = {
     "한화오션": "042660",
     "삼성중공업": "010140",
 
-    # 🤖 AI / 반도체 / IT / 통신 / 콘텐츠
+    # 🤖 AI / 반도체 / IT / 통신 / 콘텐츠 / 바이오 / 신규상장
+    "리브스메드": "491000",
     "SAMG엔터": "419530",
     "SAMG": "419530",
     "에스에이엠지엔터": "419530",
@@ -140,17 +141,30 @@ def resolve_ticker(symbol_or_name: str) -> str:
     if cleaned.endswith(".KS") or cleaned.endswith(".KQ"):
         return cleaned[:6]
 
-    # 미등록 종목인 경우 네이버 증권 자동완성 API로 6자리 코드 검색
+    # 1차: 네이버 통합 주가 검색 크롤링 (신규 상장주 100% 지원)
     try:
-        url = f"https://ac.finance.naver.com/ac?q={cleaned}&target=stock"
-        res = requests.get(url, timeout=2).json()
-        items = res.get("items", [[]])[0]
-        if items:
-            for item in items:
-                # [종목명, 코드, ...]
-                if len(item) >= 2 and len(item[1]) == 6 and item[1].isdigit():
-                    KNOWN_TICKERS[cleaned] = item[1]
-                    return item[1]
+        url = f"https://search.naver.com/search.naver?query={cleaned}+주가"
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}, timeout=3)
+        codes = re.findall(r'item/main\.naver\?code=([0-9]{6})', res.text)
+        if not codes:
+            codes = re.findall(r'code=([0-9]{6})', res.text)
+        if codes:
+            found_code = codes[0]
+            KNOWN_TICKERS[cleaned] = found_code
+            return found_code
+    except Exception as e:
+        print(f"[RESOLVE_TICKER NAVER SEARCH ERROR] {e}")
+
+    # 2차: 모바일 증권 검색 fallback
+    try:
+        url = f"https://m.stock.naver.com/api/json/search/searchListJson.nhn?keyword={cleaned}"
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=3).json()
+        search_items = res.get("result", {}).get("d", [])
+        if search_items:
+            found_code = search_items[0].get("cd", "")
+            if len(found_code) == 6 and found_code.isdigit():
+                KNOWN_TICKERS[cleaned] = found_code
+                return found_code
     except Exception:
         pass
 

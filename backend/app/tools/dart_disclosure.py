@@ -49,8 +49,24 @@ def fetch_financial_facts(symbol_or_name: str, force_refresh: bool = False) -> D
             titles = fin_info.get("trTitleList", [])
             rows = fin_info.get("rowList", [])
 
-            # 항목별 매핑 생성
-            row_map = {r.get("title", "").strip(): r.get("columns", {}) for r in rows}
+            # 항목별 매핑 생성 (유연한 키워드 매칭)
+            def get_cols(keywords: List[str]):
+                for r in rows:
+                    t = r.get("title", "").strip()
+                    if any(k in t for k in keywords):
+                        return r.get("columns", {})
+                return {}
+
+            rev_cols = get_cols(["매출액", "매출"])
+            op_cols = get_cols(["영업이익"])
+            net_cols = get_cols(["당기순이익", "순이익", "당기순익"])
+            opm_cols = get_cols(["영업이익률", "OPM"])
+            roe_cols = get_cols(["ROE", "자기자본이익률"])
+            debt_cols = get_cols(["부채비율"])
+            eps_cols = get_cols(["EPS", "주당순이익"])
+            per_cols = get_cols(["PER", "주가수익비율"])
+            bps_cols = get_cols(["BPS", "주당순자산"])
+            pbr_cols = get_cols(["PBR", "주가순자산비율"])
             
             # 각 연도(컬럼)별 데이터 추출
             rev_list = []
@@ -72,20 +88,19 @@ def fetch_financial_facts(symbol_or_name: str, force_refresh: bool = False) -> D
                 if is_cons:
                     year_label = f"{year_label}(E)"
 
-                def get_val(row_name: str, default: str = "-") -> str:
-                    cols = row_map.get(row_name, {})
+                def get_val_from(cols: dict, default: str = "-") -> str:
                     val_obj = cols.get(key, {})
                     val = val_obj.get("value", default) if isinstance(val_obj, dict) else default
                     return val if val and val != "-" else "N/A"
 
-                rev_val = get_val("매출액")
-                op_val = get_val("영업이익")
-                net_val = get_val("당기순이익")
-                opm_val = get_val("영업이익률")
-                roe_val = get_val("ROE")
-                debt_val = get_val("부채비율")
-                eps_val = get_val("EPS")
-                per_val = get_val("PER")
+                rev_val = get_val_from(rev_cols)
+                op_val = get_val_from(op_cols)
+                net_val = get_val_from(net_cols)
+                opm_val = get_val_from(opm_cols)
+                roe_val = get_val_from(roe_cols)
+                debt_val = get_val_from(debt_cols)
+                eps_val = get_val_from(eps_cols)
+                per_val = get_val_from(per_cols)
 
                 # 숫자 리스트 수집 for CAGR 계산
                 def parse_num(v: str) -> Optional[float]:
