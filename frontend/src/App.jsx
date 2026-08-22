@@ -69,7 +69,9 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.warn('백엔드 미연결 감지, 모의 시뮬레이션으로 전환:', err.message);
+      console.warn('백엔드 응답 지연/오류 감지:', err.message);
+      addLog('WARN', `클라우드 백엔드 접속 지연: ${err.message}`, 'guard');
+      addLog('INFO', '원활한 분석을 위해 로컬 고속 시뮬레이터로 안전하게 전환합니다.', 'info');
       await runMockSimulation(prompt);
     } finally {
       setIsAnalyzing(false);

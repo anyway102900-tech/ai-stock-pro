@@ -58,20 +58,23 @@ def parse_rice_prompt(prompt_text: str) -> Dict[str, Any]:
     else:
         sector = "AI"
 
-    # 3. 분석 대상 단일 종목 추출
+    # 3. 분석 대상 단일/대표 종목 추출
     symbol = None
-    symbol_match = re.search(r'(?:분석 대상|종목명|대상 종목|기업명|구성 종목)[:\s]*([가-힣A-Za-z0-9]+)', prompt_text)
+    # '분석 대상:', '분석 대상 :', '종목명:' 등의 다양한 패턴 매칭
+    symbol_match = re.search(r'(?:분석\s*대상|종목명|대상\s*종목|기업명|구성\s*종목)[:\s]*([가-힣A-Za-z0-9\s,]+)', prompt_text)
     if symbol_match:
-        cand = symbol_match.group(1).strip()
-        if cand not in STOPWORDS and len(cand) > 1:
-            symbol = cand
+        cand_line = symbol_match.group(1).split('\n')[0].strip()
+        # 콤마로 나뉘어 있으면 첫 번째 대표 종목 선택
+        first_cand = cand_line.split(',')[0].strip()
+        if first_cand and first_cand not in STOPWORDS and len(first_cand) > 1:
+            symbol = first_cand
 
     if not symbol:
         known_candidates = [
-            "두산에너빌리티", "HD현대일렉트릭", "한화솔루션", "씨에스윈드", "LS ELECTRIC", "효성중공업", "한국전력",
-            "LG에너지솔루션", "포스코홀딩스", "POSCO홀딩스", "에코프로비엠", "에코프로", "삼성SDI",
-            "삼성바이오로직스", "셀트리온", "알테오젠", "유한양행", "한화에어로스페이스", "현대로템", "한국항공우주",
-            "NAVER", "네이버", "카카오", "리노공업", "한미반도체", "삼성전자", "SK하이닉스", "SK텔레콤", "KT", 
+            "NAVER", "네이버", "카카오", "KODEX", "TIGER", "두산에너빌리티", "HD현대일렉트릭", "한화솔루션", "씨에스윈드", 
+            "LS ELECTRIC", "효성중공업", "한국전력", "LG에너지솔루션", "포스코홀딩스", "POSCO홀딩스", "에코프로비엠", 
+            "에코프로", "삼성SDI", "삼성바이오로직스", "셀트리온", "알테오젠", "유한양행", "한화에어로스페이스", "현대로템", 
+            "한국항공우주", "리노공업", "한미반도체", "삼성전자", "SK하이닉스", "SK텔레콤", "KT", 
             "삼성에스디에스", "삼성SDS", "DB하이텍", "에스에프에이", "LG유플러스", "현대차", "기아"
         ]
         for cand in known_candidates:
