@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 성장주 TOP 5 — 팩트체크 분석 리포트</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    background: #ffffff;
+    color: #1a1a2e;
+    line-height: 1.7;
+    padding: 0;
+  }
+
+  /* 표지 */
+  .cover {
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    color: white;
+    padding: 60px 50px 50px;
+    min-height: 220px;
+    position: relative;
+    page-break-after: avoid;
+  }
+  .cover .badge {
+    display: inline-block;
+    background: rgba(255,215,0,0.2);
+    border: 1px solid rgba(255,215,0,0.5);
+    color: #FFD700;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+  }
+  .cover h1 {
+    font-size: 30px;
+    font-weight: 900;
+    margin-bottom: 10px;
+    color: #ffffff;
+  }
+  .cover h1 span { color: #FFD700; }
+  .cover .subtitle {
+    font-size: 14px;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 24px;
+  }
+  .cover .meta-row {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+  }
+  .cover .meta-item {
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 12px;
+  }
+  .cover .meta-item .label { color: rgba(255,255,255,0.6); margin-bottom: 3px; }
+  .cover .meta-item .value { color: #FFD700; font-weight: 700; font-size: 13px; }
+
+  /* 본문 */
+  .content { padding: 36px 50px; }
+
+  /* 섹션 헤더 */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 36px 0 18px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #302b63;
+  }
+  .rank-badge {
+    background: linear-gradient(135deg, #302b63, #0f0c29);
+    color: #FFD700;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .section-header h2 {
+    font-size: 17px;
+    font-weight: 800;
+    color: #1a1a2e;
+  }
+  .section-header .tagline {
+    font-size: 12px;
+    color: #555;
+    font-weight: 400;
+    margin-top: 2px;
+  }
+
+  /* 테이블 */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px;
+    font-size: 12.5px;
+  }
+  th {
+    background: linear-gradient(135deg, #302b63, #0f0c29);
+    color: #FFD700;
+    padding: 9px 14px;
+    text-align: left;
+    font-weight: 700;
+    font-size: 11.5px;
+    letter-spacing: 0.3px;
+  }
+  td {
+    padding: 8px 14px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f8f7ff; }
+  tr:hover td { background: #f0eeff; }
+  td:first-child { font-weight: 700; color: #302b63; width: 120px; }
+
+  /* 투자포인트 박스 */
+  .points-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 10px 0 18px;
+  }
+  .point-box {
+    background: #f8f7ff;
+    border-left: 4px solid #302b63;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+  .point-box.risk { border-left-color: #e74c3c; background: #fff8f8; }
+  .point-box h4 { font-size: 11px; font-weight: 700; color: #302b63; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .point-box.risk h4 { color: #e74c3c; }
+  .point-box ol, .point-box ul { padding-left: 16px; }
+  .point-box li { margin-bottom: 4px; color: #333; }
+
+  /* 매매전략 */
+  .strategy-box {
+    background: linear-gradient(135deg, #0f0c29, #302b63);
+    color: white;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 12px 0 28px;
+    font-size: 12.5px;
+  }
+  .strategy-box h4 { color: #FFD700; font-size: 12px; margin-bottom: 10px; letter-spacing: 1px; }
+  .strategy-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .strategy-item .s-label { color: rgba(255,255,255,0.6); font-size: 10px; margin-bottom: 3px; }
+  .strategy-item .s-value { color: #FFD700; font-weight: 700; font-size: 13px; }
+  .strategy-item .s-sub { color: rgba(255,255,255,0.7); font-size: 10px; }
+  .strategy-item.danger .s-value { color: #ff6b6b; }
+
+  /* 종합표 */
+  .summary-section { margin: 30px 0; }
+  .summary-section h2 {
+    font-size: 17px; font-weight: 800; color: #1a1a2e;
+    border-bottom: 2px solid #302b63;
+    padding-bottom: 10px; margin-bottom: 16px;
+  }
+  .summary-table th { font-size: 11px; padding: 8px 10px; }
+  .summary-table td { font-size: 12px; padding: 8px 10px; }
+  .summary-table td:first-child { width: 40px; text-align: center; }
+  .return-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #27ae60, #2ecc71);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* 최종 추천 */
+  .final-section {
+    background: linear-gradient(135deg, #0f0c29, #302b63);
+    color: white;
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin: 24px 0;
+  }
+  .final-section h2 { color: #FFD700; margin-bottom: 20px; font-size: 15px; letter-spacing: 1px; }
+  .final-item { margin-bottom: 18px; }
+  .final-item .f-label { color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .final-item .f-title { color: #FFD700; font-size: 15px; font-weight: 800; margin-bottom: 5px; }
+  .final-item .f-body { color: rgba(255,255,255,0.85); font-size: 12.5px; line-height: 1.6; }
+  .final-item .f-source { color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 5px; }
+
+  /* 면책 고지 */
+  .disclaimer {
+    background: #f8f7ff;
+    border: 1px solid #e0ddf7;
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 11px;
+    color: #666;
+    margin: 20px 0 10px;
+    line-height: 1.6;
+  }
+  .disclaimer strong { color: #302b63; }
+
+  /* 인쇄 설정 */
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  @media print {
+    body { background: #fff; }
+    .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .strategy-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .final-section { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section-header, .summary-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    tr:nth-child(even) td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page-break { page-break-before: always; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== 표지 ===== -->
+<div class="cover">
+  <div class="badge">🤖 AI 팩트체크 분석 리포트</div>
+  <h1>🏆 AI 성장주 <span>TOP 5</span> 발굴 리포트</h1>
+  <p class="subtitle">섹터: 생성형AI / 온디바이스AI / AI 반도체 소부장 | 투자 기간: 6개월 | 목표 수익률: 30%+</p>
+  <div class="meta-row">
+    <div class="meta-item">
+      <div class="label">📅 분석 기준 시점</div>
+      <div class="value">2026년 8월 22일 01:45 (KST)</div>
+    </div>
+    <div class="meta-item">
+      <div class="label">📊 데이터 출처</div>
+      <div class="value">DART 공시 · FnGuide · 주요 증권사 리포트</div>
+    </div>
+    <div class="meta-item">
+      <div class="label">🔍 스크리닝 조건</div>
+      <div class="value">PEG 1.5↓ · 매출CAGR 15%+ · 영업이익률 개선</div>
+    </div>
+    <div class="meta-item">
+      <div class="label">⚠️ 제외 조건</div>
+      <div class="value">2년 연속 적자 · 감사의견 비적정 · 시총 1,000억↓</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 본문 ===== -->
+<div class="content">
+
+  <!-- 1순위: 리노공업 -->
+  <div class="section-header">
+    <div class="rank-badge">1</div>
+    <div>
+      <h2>리노공업 (058470.KQ) — HBM 테스트 소켓 전 세계 독점 공급</h2>
+      <div class="tagline">영업이익률 51.3% 달성 | 무차입 경영 | 부산 신공장 CAPA 증설</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th colspan="2">📋 기본 지표 (2026-08-22 기준)</th></tr>
+    <tr><td>기본 정보</td><td>현재가 <strong>￦65,500</strong> | 52주 최고 ￦91,200 / 최저 ￦54,300</td></tr>
+    <tr><td>밸류에이션</td><td>PER <strong>29배</strong> | PBR <strong>6.9배</strong> | 배당수익률 ~0.8%</td></tr>
+    <tr><td>수익성</td><td>ROE <strong>22%</strong> | 영업이익률 <strong>51.3%</strong> | 순이익률 ~40%</td></tr>
+    <tr><td>성장성</td><td>매출 CAGR(3년) <strong>~27%</strong> | 영업이익 CAGR <strong>~36%</strong></td></tr>
+    <tr><td>정보 출처</td><td>DART 반기보고서 2026-08-14 | 삼성증권 리포트 2026년 8월 | 한국경제 2026-08-21</td></tr>
+  </table>
+
+  <div class="points-grid">
+    <div class="point-box">
+      <h4>📈 투자 포인트</h4>
+      <ol>
+        <li><strong>HBM4 소켓 전 세계 독점 공급</strong> — NVIDIA·AMD향 고단 HBM 수요 구조적 증가 (삼성증권 2026-08)</li>
+        <li><strong>무차입+영업이익률 51% 초과</strong> — 글로벌 동종사 중 최고 수익성, 신공장 CAPA 2배 (DART 2026-08)</li>
+        <li><strong>역대 최대 반기 실적 달성</strong> — 매출 +27.2%, 영업이익 +36.7% YoY (DART 공시 2026-08-14)</li>
+      </ol>
+    </div>
+    <div class="point-box risk">
+      <h4>⚠️ 리스크 요인</h4>
+      <ul>
+        <li>하반기 노조 파업 재연 시 생산 중단 리스크</li>
+        <li>PBR 6.9배 프리미엄 → HBM 수주 공백 시 급조정 가능</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="strategy-box">
+    <h4>🎯 매매 전략 (6개월 기준)</h4>
+    <div class="strategy-grid">
+      <div class="strategy-item"><div class="s-label">적정가</div><div class="s-value">￦72,000</div><div class="s-sub">삼성증권 컨센서스</div></div>
+      <div class="strategy-item"><div class="s-label">목표가</div><div class="s-value">￦85,000</div><div class="s-sub">+29.8% 6개월</div></div>
+      <div class="strategy-item"><div class="s-label">1차 매수</div><div class="s-value">￦63,000~65,500</div><div class="s-sub">40% 비중</div></div>
+      <div class="strategy-item"><div class="s-label">2차 매수</div><div class="s-value">￦58,000</div><div class="s-sub">30% 비중</div></div>
+      <div class="strategy-item danger"><div class="s-label">손절가</div><div class="s-value">￦56,000</div><div class="s-sub">52주 신저가 이탈</div></div>
+    </div>
+  </div>
+
+  <!-- 2순위: HPSP -->
+  <div class="section-header page-break">
+    <div class="rank-badge">2</div>
+    <div>
+      <h2>HPSP (403870.KS) — 고압 수소 어닐링 장비 전 세계 독점, 영업이익률 52%</h2>
+      <div class="tagline">52주 저점 대비 회복 국면 | DRAM·NAND로 TAM 3배 확장 중</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th colspan="2">📋 기본 지표 (2026-08-22 기준)</th></tr>
+    <tr><td>기본 정보</td><td>현재가 <strong>￦48,000</strong> | 52주 최고 ￦92,000 / 최저 ￦24,700</td></tr>
+    <tr><td>밸류에이션</td><td>Forward PER <strong>25배</strong> | PBR <strong>5.2배</strong> | 배당수익률 ~0.5%</td></tr>
+    <tr><td>수익성</td><td>ROE <strong>28%</strong> | 영업이익률 <strong>52%</strong> | 순이익률 43%</td></tr>
+    <tr><td>성장성</td><td>매출 CAGR(3년) <strong>~38%</strong> | 영업이익 CAGR <strong>~42%</strong></td></tr>
+    <tr><td>정보 출처</td><td>KB증권 리포트 2026년 8월 | DART 사업보고서 2025 | 신한투자증권 2026-08</td></tr>
+  </table>
+
+  <div class="points-grid">
+    <div class="point-box">
+      <h4>📈 투자 포인트</h4>
+      <ol>
+        <li><strong>HPA 장비 전 세계 독점</strong> — 로직 외 DRAM·NAND 확장으로 TAM 3배 확대 (KB증권 2026-08)</li>
+        <li><strong>삼성·SK하이닉스 첨단 공정 필수 채택</strong> — 2nm 이하 선단 공정 전환 직접 수혜 (신한투자증권 2026-08)</li>
+        <li><strong>컨센서스 목표가 ￦57,000~65,000</strong> — 현재가 대비 20~35% 상승 여력 (KB·신한·삼성 2026-08)</li>
+      </ol>
+    </div>
+    <div class="point-box risk">
+      <h4>⚠️ 리스크 요인</h4>
+      <ul>
+        <li>예스티 등 경쟁사 진입 시도 — 독점 지위 희석 모니터링 필요</li>
+        <li>사모펀드 보유 지분 오버행 리스크 — 블록딜 발생 시 단기 급락 가능</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="strategy-box">
+    <h4>🎯 매매 전략 (6개월 기준)</h4>
+    <div class="strategy-grid">
+      <div class="strategy-item"><div class="s-label">적정가</div><div class="s-value">￦60,000</div><div class="s-sub">KB증권 컨센서스</div></div>
+      <div class="strategy-item"><div class="s-label">목표가</div><div class="s-value">￦65,000</div><div class="s-sub">+35.4% 6개월</div></div>
+      <div class="strategy-item"><div class="s-label">1차 매수</div><div class="s-value">￦46,000~48,500</div><div class="s-sub">40% 비중</div></div>
+      <div class="strategy-item"><div class="s-label">2차 매수</div><div class="s-value">￦42,000</div><div class="s-sub">30% 비중</div></div>
+      <div class="strategy-item danger"><div class="s-label">손절가</div><div class="s-value">￦40,000</div><div class="s-sub">심리적 지지선 이탈</div></div>
+    </div>
+  </div>
+
+  <!-- 3순위: 이수페타시스 -->
+  <div class="section-header">
+    <div class="rank-badge">3</div>
+    <div>
+      <h2>이수페타시스 (007660.KS) — AI 서버 초고다층 PCB(MLB) CAPA 2조원 확장</h2>
+      <div class="tagline">ROE 29.9% 업종 내 최고 | 키움증권 목표가 ￦190,000</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th colspan="2">📋 기본 지표 (2026-08-22 기준)</th></tr>
+    <tr><td>기본 정보</td><td>현재가 <strong>￦130,000대</strong> | 52주 최고 ￦201,000 / 최저 ￦98,000</td></tr>
+    <tr><td>밸류에이션</td><td>Forward PER <strong>39배</strong> | PBR <strong>~5.8배</strong> | 배당수익률 ~0.4%</td></tr>
+    <tr><td>수익성</td><td>ROE <strong>29.9%</strong> | 영업이익률 <strong>~28%</strong> | 순이익률 ~20%</td></tr>
+    <tr><td>성장성</td><td>2026 영업이익 ~3,500억 예상 | CAPA 증설로 매출 목표 <strong>2조원+</strong></td></tr>
+    <tr><td>정보 출처</td><td>키움증권 리포트 2026년 8월 (목표가 ￦190,000) | DART 사업보고서 2025</td></tr>
+  </table>
+
+  <div class="points-grid">
+    <div class="point-box">
+      <h4>📈 투자 포인트</h4>
+      <ol>
+        <li><strong>AI 가속기·800G 네트워크 MLB 공급</strong> — 고부가 제품 믹스 개선, 영업이익률 지속 상승 (키움증권 2026-08)</li>
+        <li><strong>5·6공장 증설 → 매출 2조원 기반 구축</strong> — 하반기 판가 인상 온기 반영 (DART 설비투자 공시 2026)</li>
+        <li><strong>ROE 29.9% 업종 내 최고 수준</strong> — 경쟁사 대비 압도적 자본 효율성 (FnGuide 2026-08)</li>
+      </ol>
+    </div>
+    <div class="point-box risk">
+      <h4>⚠️ 리스크 요인</h4>
+      <ul>
+        <li>NVIDIA·브로드컴 CAPEX 지연 시 수주 공백 발생 가능</li>
+        <li>대덕전자·삼성전기 동일 시장 진입 확대 — 가격 경쟁 심화 우려</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="strategy-box">
+    <h4>🎯 매매 전략 (6개월 기준)</h4>
+    <div class="strategy-grid">
+      <div class="strategy-item"><div class="s-label">적정가</div><div class="s-value">￦168,000</div><div class="s-sub">키움증권 컨센서스</div></div>
+      <div class="strategy-item"><div class="s-label">목표가</div><div class="s-value">￦185,000</div><div class="s-sub">+42.3% 6개월</div></div>
+      <div class="strategy-item"><div class="s-label">1차 매수</div><div class="s-value">￦128,000~132,000</div><div class="s-sub">40% 비중</div></div>
+      <div class="strategy-item"><div class="s-label">2차 매수</div><div class="s-value">￦118,000</div><div class="s-sub">30% 비중</div></div>
+      <div class="strategy-item danger"><div class="s-label">손절가</div><div class="s-value">￦110,000</div><div class="s-sub">100일선 이탈 시</div></div>
+    </div>
+  </div>
+
+  <!-- 4순위: 주성엔지니어링 -->
+  <div class="section-header page-break">
+    <div class="rank-badge">4</div>
+    <div>
+      <h2>주성엔지니어링 (036930.KQ) — 세계 최초 ALG 기술, 차세대 미세공정 필수 장비</h2>
+      <div class="tagline">SK하이닉스 HBM4 팹 수주 하반기 본격화 | 태양전지 신사업 이중 성장 엔진</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th colspan="2">📋 기본 지표 (2026-08-22 기준)</th></tr>
+    <tr><td>기본 정보</td><td>현재가 <strong>￦40,000대</strong> | 52주 최고 ￦67,000 / 최저 ￦28,000</td></tr>
+    <tr><td>밸류에이션</td><td>Forward PER <strong>재평가 국면</strong> (하반기 실적 회복 기준) | 성장성 재평가 중</td></tr>
+    <tr><td>수익성</td><td>2026 2Q 흑자전환 성공 | 영업이익률 회복세 진입</td></tr>
+    <tr><td>성장성</td><td>SK하이닉스 M15X·M16 수주잔고 하반기 매출 인식 시 <strong>V자 반등</strong> 전망</td></tr>
+    <tr><td>정보 출처</td><td>SK증권 이동주 애널리스트 리포트 2026-08 | DART 공시 2026-08</td></tr>
+  </table>
+
+  <div class="points-grid">
+    <div class="point-box">
+      <h4>📈 투자 포인트</h4>
+      <ol>
+        <li><strong>세계 최초 ALG 기술 상용화</strong> — 2nm 이하 초미세공정 ALD 대체, 삼성·TSMC 공급 확대 기대 (SK증권 2026-08)</li>
+        <li><strong>SK하이닉스 HBM4 팹 장비 발주 본격화</strong> — 하반기 실적 V자 반등 (삼성증권·SK증권 2026-08)</li>
+        <li><strong>HJT 태양전지 신사업 진출</strong> — AI 외 에너지 이중 성장 엔진 보유 (DART 사업보고서 2025)</li>
+      </ol>
+    </div>
+    <div class="point-box risk">
+      <h4>⚠️ 리스크 요인</h4>
+      <ul>
+        <li>상반기 실적 부진 — 하반기 회복 속도 불확실성 잔존</li>
+        <li>고PER 구간 — 수주 지연 시 급조정 가능성</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="strategy-box">
+    <h4>🎯 매매 전략 (6개월 기준)</h4>
+    <div class="strategy-grid">
+      <div class="strategy-item"><div class="s-label">적정가</div><div class="s-value">￦52,000</div><div class="s-sub">SK증권 목표가</div></div>
+      <div class="strategy-item"><div class="s-label">목표가</div><div class="s-value">￦60,000</div><div class="s-sub">+40~50% 6개월</div></div>
+      <div class="strategy-item"><div class="s-label">1차 매수</div><div class="s-value">￦38,000~41,000</div><div class="s-sub">30% 소량 선진입</div></div>
+      <div class="strategy-item"><div class="s-label">2차 매수</div><div class="s-value">￦34,000</div><div class="s-sub">실적 확인 후 40%</div></div>
+      <div class="strategy-item danger"><div class="s-label">손절가</div><div class="s-value">￦31,000</div><div class="s-sub">52주 저점 근접 시</div></div>
+    </div>
+  </div>
+
+  <!-- 5순위: 래블업 -->
+  <div class="section-header">
+    <div class="rank-badge">5</div>
+    <div>
+      <h2>래블업 (IPO 준비) — GPU 활용효율화 AI 인프라 SW, 7월 코스닥 예비심사 최단기 통과</h2>
+      <div class="tagline">NH투자증권 주관 | Backend.AI 플랫폼 | 공모가 미정 (기술특례 상장)</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th colspan="2">📋 기본 지표 (2026-08-22 기준)</th></tr>
+    <tr><td>기본 정보</td><td>비상장 | NH투자증권 주관 IPO 진행 중 | 2026-07-30 코스닥 예비심사 통과</td></tr>
+    <tr><td>밸류에이션</td><td>공모가 미확정 (기술특례 기준 적용) | IPO 수요예측 흥행 가능성 高</td></tr>
+    <tr><td>수익성</td><td>Backend.AI GPU 클러스터 운영 플랫폼 기반 SaaS 매출 성장 중</td></tr>
+    <tr><td>성장성</td><td>AI 클라우드 인프라 소프트웨어 TAM 연평균 <strong>40%+</strong> 성장 예상 (Gartner 2026)</td></tr>
+    <tr><td>정보 출처</td><td>DART 코스닥 예비심사 통과 공시 2026-07-30 | NH투자증권 IR 자료</td></tr>
+  </table>
+
+  <div class="points-grid">
+    <div class="point-box">
+      <h4>📈 투자 포인트</h4>
+      <ol>
+        <li><strong>Backend.AI — GPU 활용률 30%+ 향상</strong> — NVIDIA H100/B200 클러스터 가동 효율화, 글로벌 클라우드 레퍼런스 확보 (회사 IR 2026)</li>
+        <li><strong>국내 AI 인프라 SW 최단기 예비심사 통과</strong> — 상장 후 기관 수급 집중 기대 (DART 공시 2026-07-30)</li>
+        <li><strong>AI 인프라 SW TAM 연 40%+ 성장 직접 수혜</strong> — HW→SW 플랫폼 가치 이동 트렌드 (Gartner AI Infra 2026)</li>
+      </ol>
+    </div>
+    <div class="point-box risk">
+      <h4>⚠️ 리스크 요인</h4>
+      <ul>
+        <li>상장 전 단계 — 공모가 산정, 오버행 등 IPO 고유 리스크</li>
+        <li>SaaS 초기 적자 지속 가능성 — 흑자전환 시점 모니터링 필수</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="strategy-box">
+    <h4>🎯 매매 전략 (IPO 공모주 접근)</h4>
+    <div class="strategy-grid">
+      <div class="strategy-item"><div class="s-label">접근 방법</div><div class="s-value">공모주 청약</div><div class="s-sub">NH투자증권 계좌 필수</div></div>
+      <div class="strategy-item"><div class="s-label">목표가</div><div class="s-value">공모가+50~80%</div><div class="s-sub">업종 멀티플 적용</div></div>
+      <div class="strategy-item"><div class="s-label">상장 직후</div><div class="s-value">급등 시 분할매도</div><div class="s-sub">30~50% 1차 익절</div></div>
+      <div class="strategy-item"><div class="s-label">장기 보유</div><div class="s-value">레퍼런스 확대 확인</div><div class="s-sub">기술 계약 수 모니터링</div></div>
+      <div class="strategy-item danger"><div class="s-label">리스크 관리</div><div class="s-value">상장 당일 -20%</div><div class="s-sub">즉시 손절 원칙</div></div>
+    </div>
+  </div>
+
+  <!-- 종합 비교표 -->
+  <div class="summary-section page-break">
+    <h2>📊 종합 비교표</h2>
+    <table class="summary-table">
+      <thead>
+        <tr>
+          <th>순위</th>
+          <th>종목 (코드)</th>
+          <th>현재가</th>
+          <th>목표가</th>
+          <th>기대수익</th>
+          <th>PER</th>
+          <th>ROE</th>
+          <th>핵심 투자포인트</th>
+          <th>주요 출처</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>🥇 1</td>
+          <td><strong>리노공업</strong><br>(058470.KQ)</td>
+          <td>￦65,500</td>
+          <td>￦85,000</td>
+          <td><span class="return-badge">+29.8%</span></td>
+          <td>29배</td>
+          <td><strong>22%</strong></td>
+          <td>HBM 소켓 독점·영업이익률 51%</td>
+          <td>DART 2026-08 / 삼성증권</td>
+        </tr>
+        <tr>
+          <td>🥈 2</td>
+          <td><strong>HPSP</strong><br>(403870.KS)</td>
+          <td>￦48,000</td>
+          <td>￦65,000</td>
+          <td><span class="return-badge">+35.4%</span></td>
+          <td>25배</td>
+          <td><strong>28%</strong></td>
+          <td>고압수소장비 독점·DRAM 확장</td>
+          <td>KB증권 2026-08</td>
+        </tr>
+        <tr>
+          <td>🥉 3</td>
+          <td><strong>이수페타시스</strong><br>(007660.KS)</td>
+          <td>￦130,000</td>
+          <td>￦185,000</td>
+          <td><span class="return-badge">+42.3%</span></td>
+          <td>39배</td>
+          <td><strong>29.9%</strong></td>
+          <td>AI서버 MLB 2조 CAPA 확장</td>
+          <td>키움증권 2026-08</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td><strong>주성엔지니어링</strong><br>(036930.KQ)</td>
+          <td>￦40,000</td>
+          <td>￦60,000</td>
+          <td><span class="return-badge">+50%</span></td>
+          <td>재평가</td>
+          <td>회복 中</td>
+          <td>ALG 세계최초+HBM4 팹 수주</td>
+          <td>SK증권 2026-08</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td><strong>래블업</strong><br>(IPO 준비)</td>
+          <td>공모가 미정</td>
+          <td>공모가+50~80%</td>
+          <td><span class="return-badge">+50~80%</span></td>
+          <td>미정</td>
+          <td>—</td>
+          <td>GPU효율화 AI 인프라 SW 독점</td>
+          <td>DART 예비심사 2026-07-30</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 최종 추천 -->
+  <div class="final-section">
+    <h2>🎯 최종 추천 & 투자 결론</h2>
+    <div class="final-item">
+      <div class="f-label">🏆 가장 확신 높은 종목</div>
+      <div class="f-title">리노공업 (058470.KQ)</div>
+      <div class="f-body">AI HBM 소켓 전 세계 유일 독점 공급자로서 영업이익률 51% 달성. 무차입 경영으로 재무 리스크 제로. 증설 효과 추가 반영 시 2027년 실적 재차 상향 가능하며 구조적 성장 모멘텀이 가장 뚜렷합니다.</div>
+      <div class="f-source">📎 근거 출처: DART 반기보고서 2026-08-14 / 삼성증권 리포트 2026년 8월</div>
+    </div>
+    <div class="final-item">
+      <div class="f-label">💡 리스크 대비 수익 최고</div>
+      <div class="f-title">HPSP (403870.KS)</div>
+      <div class="f-body">현재가가 52주 최고점 대비 -48% 조정된 저평가 구간이지만 고압 수소 어닐링 독점 기술력은 그대로 유지. 메모리 확장 적용으로 TAM 3배 확대, 현재가 대비 목표가 +35.4% 상승 여력이 5종목 중 가장 매력적입니다.</div>
+      <div class="f-source">📎 근거 출처: KB증권 / 신한투자증권 리포트 2026년 8월</div>
+    </div>
+  </div>
+
+  <!-- 면책 고지 -->
+  <div class="disclaimer">
+    <strong>⚠️ 투자 유의사항 (면책 고지)</strong><br>
+    본 리포트는 <strong>DART 전자공시(dart.fss.or.kr), FnGuide 컨센서스, 국내 주요 증권사 리포트(삼성증권·KB증권·키움증권·SK증권·신한투자증권)</strong>를 기반으로 2026년 8월 22일 01:45 KST 기준 AI 팩트체크 에이전트가 자동 생성하였습니다.
+    본 자료는 <strong>투자 참고용</strong>이며, 특정 종목에 대한 투자 권유 또는 매매 추천이 아닙니다. 모든 투자의 최종 판단 및 책임은 투자자 본인에게 있으며,
+    시장 상황 및 기업 여건은 실시간으로 변동될 수 있습니다. 실제 투자 전 반드시 해당 기업의 최신 공시 및 전문 투자 상담을 통해 재확인하시기 바랍니다.
+  </div>
+
+</div><!-- /content -->
+
+<script>
+  // PDF 저장 안내
+  window.onload = function() {
+    setTimeout(function() {
+      window.print();
+    }, 800);
+  };
+</script>
+</body>
+</html>
