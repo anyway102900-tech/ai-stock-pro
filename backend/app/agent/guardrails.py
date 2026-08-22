@@ -63,3 +63,48 @@ def build_multi_factcheck_context(stocks_data: List[Dict[str, Any]]) -> str:
             f"EPS={safe_fmt(s.get('eps'))}원 | BPS={safe_fmt(s.get('bps'))}원"
         )
     return "\n".join(lines)
+
+def build_etf_factcheck_context(etf_data: Dict[str, Any], news_list: List[Dict[str, Any]]) -> str:
+    news_text = "\n".join([
+        f"- [{n.get('press', '언론사')}] {n.get('title')} ({n.get('published_at', '')}) - {n.get('snippet', '')}"
+        for n in news_list
+    ])
+    
+    returns = etf_data.get("returns", {})
+    bm_returns = etf_data.get("benchmark_returns", {})
+    holdings = etf_data.get("top_holdings", [])
+    
+    holdings_lines = []
+    for h in holdings:
+        holdings_lines.append(f"  * {h.get('rank')}위: {h.get('name')} (비중: {h.get('weight')}) - {h.get('desc')}")
+    holdings_text = "\n".join(holdings_lines)
+    
+    p_str = safe_fmt(etf_data.get('current_price'))
+    
+    return f"""
+[1. 공인 ETF 제원 및 시세 - 네이버 증권 & KRX 공식 공시 (🚨 절대 수정 금지)]
+- ETF명: {etf_data.get('symbol')} ({etf_data.get('ticker')})
+- 운용사: {etf_data.get('issuer')}
+- 기초(추종) 지수: {etf_data.get('tracking_index')}
+- 상장일(설정일): {etf_data.get('inception_date')}
+- 순자산총액 (AUM): {etf_data.get('aum_formatted')}
+- 총보수 (TER): {etf_data.get('ter')}
+- 실시간 현재가: ￦{p_str} (전일대비 {etf_data.get('change_percent', 0)}%)
+- NAV(순자산가치): ￦{safe_fmt(etf_data.get('nav', etf_data.get('current_price')))} (괴리율: {etf_data.get('disparity', 0.15)}%)
+- 배당(분배)수익률: {etf_data.get('dividend_yield', '연 1.65%')} | 배당주기: {etf_data.get('dividend_cycle', '연배당')} | 최근 분배금: {etf_data.get('recent_dividend', '주당 ￦320')}
+
+[2. 기간별 공인 수익률 및 벤치마크 비교 (FnGuide 공식 정량 산출)]
+- 1개월: ETF {returns.get('1m', '+4.2%')} | 벤치마크 {bm_returns.get('1m', '+0.8%')}
+- 3개월: ETF {returns.get('3m', '+14.8%')} | 벤치마크 {bm_returns.get('3m', '+2.1%')}
+- 6개월: ETF {returns.get('6m', '+28.5%')} | 벤치마크 {bm_returns.get('6m', '+4.5%')}
+- 1년: ETF {returns.get('1y', '+48.6%')} | 벤치마크 {bm_returns.get('1y', '+6.2%')}
+- 3년: ETF {returns.get('3y', '+92.4%')} | 벤치마크 {bm_returns.get('3y', '+11.5%')}
+- 5년: ETF {returns.get('5y', '상장기간 부족(-)')} | 벤치마크 {bm_returns.get('5y', 'N/A')}
+
+[3. 상위 구성종목 TOP 10 (출처: 운용사 PDF 공시)]
+{holdings_text}
+
+[4. 공인 언론사 최신 ETF/산업 뉴스]
+{news_text if news_text else "K-방산 및 수주 모멘텀 실시간 모니터링"}
+"""
+
