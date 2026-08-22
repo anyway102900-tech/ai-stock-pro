@@ -30,3 +30,34 @@ npm run dev
 4. **공인 화이트리스트 뉴스 필터링:** 한국경제, 한국경제TV, 연합인포맥스 등 공인 언론사 기사만 추출하고 루머 배제
 5. **Multi-Tier 캐싱 시스템:** 시세(15분), 뉴스(2시간), 재무공시(24시간) 로컬 캐싱 및 [캐시 무시] 강제 갱신 지원
 6. **Hallucination-Zero 가드레일:** 1차 데이터가 없는 항목은 임의 추측 없이 `(N/A)` 명시 및 1차 출처 증빙 URL 자동 첨부
+
+---
+
+## 🌐 무료 클라우드 상시 배포 가이드 (Vercel + Render)
+
+### 1단계: 백엔드 배포 (Render.com - 무료)
+1. [Render.com](https://render.com) 접속 및 GitHub 로그인
+2. **New +** -> **Web Service** 선택
+3. GitHub 저장소 `ai-stock-pro` 연결
+4. 설정값 확인:
+   - **Root Directory**: `backend`
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+5. **Environment Variables** (환경 변수) 추가:
+   - `GEMINI_API_KEY`: Google Gemini API 키
+   - `DART_API_KEY`: Open DART API 키
+6. **Deploy Web Service** 클릭 -> 완료 후 생성된 백엔드 URL 복사 (예: `https://ai-stock-backend.onrender.com`)
+
+### 2단계: 프론트엔드 배포 (Vercel.com - 무료)
+1. [Vercel.com](https://vercel.com) 접속 및 GitHub 로그인
+2. **Add New...** -> **Project** 선택
+3. GitHub 저장소 `ai-stock-pro` Import
+4. 프로젝트 설정:
+   - **Root Directory**: `frontend`
+   - **Framework Preset**: `Vite`
+5. **Environment Variables** (환경 변수) 추가:
+   - Name: `VITE_API_URL`
+   - Value: `https://ai-stock-backend.onrender.com` (1단계에서 복사한 백엔드 URL)
+6. **Deploy** 클릭 -> 약 30초 후 배포 완료 URL 생성!
+
