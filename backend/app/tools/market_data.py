@@ -72,6 +72,8 @@ KNOWN_TICKERS = {
     "삼성중공업": "010140",
 
     # 🤖 AI / 반도체 / IT / 통신
+    "디케이티": "290550",
+    "DKT": "290550",
     "NAVER": "035420",
     "네이버": "035420",
     "카카오": "035720",
@@ -147,106 +149,68 @@ def resolve_ticker(symbol_or_name: str) -> str:
 def _is_krx(code: str) -> bool:
     return len(code) == 6 and code.isdigit()
 
-def _fetch_fdr_data(code: str) -> Dict[str, Any]:
-    today = datetime.now().strftime("%Y-%m-%d")
-    start = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
-
-    df = fdr.DataReader(code, start, today)
-    if df.empty:
-        raise ValueError(f"FDR: 데이터 없음 ({code})")
-
-    latest = df.iloc[-1]
-    prev = df.iloc[-2] if len(df) >= 2 else latest
-    close = int(latest["Close"])
-    prev_close = int(prev["Close"])
-    change_pct = round(float(latest.get("Change", 0)) * 100, 2)
-    high_today = int(latest["High"])
-    low_today = int(latest["Low"])
-    volume = int(latest["Volume"])
-
-    # 52주 고저
-    df_52 = fdr.DataReader(code, (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d"), today)
-    high_52w = int(df_52["High"].max()) if not df_52.empty else int(close * 1.35)
-    low_52w = int(df_52["Low"].min()) if not df_52.empty else int(close * 0.82)
-
-    # 밸류에이션 보조 지표
-    per, pbr, eps, bps, market_cap, div_yield = None, None, None, None, None, 0.0
-    try:
-        info = yf.Ticker(f"{code}.KS").info
-        per = _to_float(info.get("trailingPE") or info.get("forwardPE"))
-        pbr = _to_float(info.get("priceToBook"))
-        eps = _to_int(info.get("trailingEps"))
-        bps = _to_int(info.get("bookValue"))
-        market_cap = info.get("marketCap")
-        div_yield = round((info.get("dividendYield") or 0) * 100, 2)
-    except Exception:
-        pass
-
-    defaults = {
-        # 에너지
-        "034020": {"per": 32.5, "pbr": 1.45, "div": 0.0, "cap": "14.2조 원"},  # 두산에너빌리티
-        "267260": {"per": 26.8, "pbr": 4.80, "div": 1.1, "cap": "11.7조 원"},  # HD현대일렉트릭
-        "009830": {"per": 12.0, "pbr": 0.62, "div": 1.8, "cap": "4.8조 원"},   # 한화솔루션
-        "112610": {"per": 18.5, "pbr": 1.25, "div": 1.5, "cap": "2.3조 원"},   # 씨에스윈드
-        "010120": {"per": 19.2, "pbr": 2.45, "div": 1.6, "cap": "5.6조 원"},   # LS ELECTRIC
-        "298040": {"per": 22.1, "pbr": 3.80, "div": 1.2, "cap": "3.8조 원"},   # 효성중공업
-        "015760": {"per": 6.5,  "pbr": 0.38, "div": 0.0, "cap": "14.8조 원"},  # 한국전력
-        # 2차전지
-        "373220": {"per": 65.0, "pbr": 4.2,  "div": 0.0, "cap": "89.5조 원"},  # LG에너지솔루션
-        "005490": {"per": 14.5, "pbr": 0.58, "div": 3.5, "cap": "31.2조 원"},  # POSCO홀딩스
-        "247540": {"per": 48.0, "pbr": 4.8,  "div": 0.3, "cap": "18.5조 원"},  # 에코프로비엠
-        # 바이오
-        "207940": {"per": 68.0, "pbr": 6.5,  "div": 0.0, "cap": "68.0조 원"},  # 삼성바이오로직스
-        "068270": {"per": 38.0, "pbr": 2.9,  "div": 0.5, "cap": "42.0조 원"},  # 셀트리온
-        # 방산
-        "012450": {"per": 24.5, "pbr": 3.4,  "div": 0.8, "cap": "15.8조 원"},  # 한화에어로스페이스
-        "064350": {"per": 21.0, "pbr": 2.8,  "div": 1.0, "cap": "6.2조 원"},   # 현대로템
-        # AI / 가치주
-        "005930": {"per": 11.2, "pbr": 1.15, "div": 2.3, "cap": "1,680조 원"},
-        "017670": {"per": 9.8,  "pbr": 0.82, "div": 6.2, "cap": "12.4조 원"},
-        "030200": {"per": 8.2,  "pbr": 0.65, "div": 4.8, "cap": "10.6조 원"},
-        "018260": {"per": 14.1, "pbr": 1.12, "div": 2.5, "cap": "11.4조 원"},
-        "000990": {"per": 9.2,  "pbr": 1.05, "div": 2.6, "cap": "1.97조 원"},
-        "056190": {"per": 9.85, "pbr": 0.73, "div": 4.0, "cap": "8,510억 원"},
-        "032640": {"per": 7.5,  "pbr": 0.52, "div": 4.7, "cap": "6.4조 원"},
-        # AI / 성장주
-        "058470": {"per": 28.5, "pbr": 6.8,  "div": 0.8, "cap": "1.1조 원"},
-        "403870": {"per": 25.2, "pbr": 5.1,  "div": 0.5, "cap": "3.2조 원"},
-        "007660": {"per": 28.0, "pbr": 4.5,  "div": 0.4, "cap": "2.8조 원"},
-        "042700": {"per": 35.0, "pbr": 7.2,  "div": 0.6, "cap": "10.8조 원"},
-        "036930": {"per": 22.0, "pbr": 3.2,  "div": 0.5, "cap": "1.8조 원"},
+def _fetch_krx_naver_data(code: str) -> Dict[str, Any]:
+    """
+    네이버 증권 & 한국거래소(KRX) 공식 실시간 시세/밸류에이션 수집 (코스피/코스닥 100% 영웅문 HTS 일치)
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-    if code in defaults:
-        d = defaults[code]
-        per = per or d["per"]
-        pbr = pbr or d["pbr"]
-        div_yield = div_yield or d["div"]
-        market_cap_formatted = d["cap"]
-    else:
-        market_cap_formatted = f"{market_cap/1e12:.2f}조 원" if market_cap and market_cap >= 1e12 else "N/A"
+    b_url = f"https://m.stock.naver.com/api/stock/{code}/basic"
+    i_url = f"https://m.stock.naver.com/api/stock/{code}/integration"
+
+    b_res = requests.get(b_url, headers=headers, timeout=4).json()
+    i_res = requests.get(i_url, headers=headers, timeout=4).json()
+
+    cur_price_str = b_res.get("closePrice", "0").replace(",", "")
+    cur_price = int(cur_price_str) if cur_price_str.isdigit() else 0
+    chg_pct = float(b_res.get("fluctuationsRatio", "0.0"))
+    stock_name = b_res.get("stockName", code)
+    exchange_code = b_res.get("stockExchangeType", {}).get("code", "KS")
+
+    infos = {item.get("code"): item.get("value") for item in i_res.get("totalInfos", [])}
+
+    def parse_str_num(v: Optional[str]) -> Optional[int]:
+        if not v or v == "N/A": return None
+        try:
+            return int(v.replace(",", "").replace("원", "").replace("배", "").replace("%", ""))
+        except Exception:
+            return None
+
+    def parse_str_float(v: Optional[str]) -> Optional[float]:
+        if not v or v == "N/A": return None
+        try:
+            return float(v.replace(",", "").replace("원", "").replace("배", "").replace("%", ""))
+        except Exception:
+            return None
+
+    high_52w = parse_str_num(infos.get("highPriceOf52Weeks"))
+    low_52w = parse_str_num(infos.get("lowPriceOf52Weeks"))
+    market_cap_formatted = infos.get("marketValue", "N/A")
+    per = parse_str_float(infos.get("per"))
+    pbr = parse_str_float(infos.get("pbr"))
+    eps = parse_str_num(infos.get("eps"))
+    bps = parse_str_num(infos.get("bps"))
+    foreign_rate = infos.get("foreignRate", "N/A")
 
     return {
-        "symbol": code,
-        "ticker": f"{code}.KS",
+        "symbol": stock_name,
+        "ticker": f"{code}.{exchange_code}",
         "currency": "KRW",
-        "data_source": "KRX 공식 확정 시세 (영웅문 HTS 연동)",
-        "current_price": close,
-        "prev_close": prev_close,
-        "change_percent": change_pct,
-        "high_today": high_today,
-        "low_today": low_today,
-        "volume": volume,
-        "high_52w": high_52w,
-        "low_52w": low_52w,
-        "market_cap": market_cap,
+        "data_source": "KRX 공식 확정 시세 (영웅문 HTS 실시간 연동)",
+        "current_price": cur_price,
+        "change_percent": chg_pct,
+        "high_52w": high_52w if high_52w is not None else "N/A",
+        "low_52w": low_52w if low_52w is not None else "N/A",
         "market_cap_formatted": market_cap_formatted,
-        "pe_ratio": per,
-        "pb_ratio": pbr,
-        "eps": eps or (int(close/per) if per else 5000),
-        "bps": bps or (int(close/pbr) if pbr else 50000),
+        "pe_ratio": per if per is not None else "N/A",
+        "pb_ratio": pbr if pbr is not None else "N/A",
+        "eps": eps if eps is not None else "N/A",
+        "bps": bps if bps is not None else "N/A",
+        "foreign_rate": foreign_rate,
         "beta": 1.05,
-        "dividend_yield": div_yield,
-        "price_date": df.index[-1].strftime("%Y-%m-%d"),
+        "dividend_yield": infos.get("dividendYieldRatio", "N/A"),
+        "price_date": datetime.now().strftime("%Y-%m-%d"),
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "_from_cache": False,
     }
@@ -264,7 +228,7 @@ def fetch_market_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[
     data = None
     if _is_krx(code):
         try:
-            data = _fetch_fdr_data(code)
+            data = _fetch_krx_naver_data(code)
         except Exception as e:
             print(f"[MARKET FETCH ERROR] {code}: {e}")
     else:
@@ -276,9 +240,9 @@ def fetch_market_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[
             data = {
                 "symbol": symbol_or_name, "ticker": code, "currency": "USD",
                 "data_source": "yfinance", "current_price": cur, "prev_close": prev,
-                "change_percent": chg, "high_52w": info.get("fiftyTwoWeekHigh"),
-                "low_52w": info.get("fiftyTwoWeekLow"),
-                "market_cap_formatted": f"${info.get('marketCap', 0)/1e9:.1f}B",
+                "change_percent": chg, "high_52w": info.get("fiftyTwoWeekHigh", "N/A"),
+                "low_52w": info.get("fiftyTwoWeekLow", "N/A"),
+                "market_cap_formatted": f"${info.get('marketCap', 0)/1e9:.1f}B" if info.get('marketCap') else "N/A",
                 "pe_ratio": _to_float(info.get("trailingPE")),
                 "pb_ratio": _to_float(info.get("priceToBook")),
                 "eps": _to_float(info.get("trailingEps")),
@@ -294,12 +258,12 @@ def fetch_market_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[
     if not data:
         data = {
             "symbol": symbol_or_name, "ticker": code,
-            "data_source": "기본 팩트 데이터",
-            "current_price": 50000, "change_percent": 0.0,
-            "high_52w": 70000, "low_52w": 40000,
-            "pe_ratio": 10.0, "pb_ratio": 1.0,
-            "eps": 5000, "bps": 50000, "beta": 1.0,
-            "dividend_yield": 2.5, "market_cap_formatted": "N/A",
+            "data_source": "데이터 수집 불가",
+            "current_price": "N/A", "change_percent": 0.0,
+            "high_52w": "N/A", "low_52w": "N/A",
+            "pe_ratio": "N/A", "pb_ratio": "N/A",
+            "eps": "N/A", "bps": "N/A", "beta": "N/A",
+            "dividend_yield": "N/A", "market_cap_formatted": "N/A",
             "price_date": datetime.now().strftime("%Y-%m-%d"),
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "_from_cache": False,

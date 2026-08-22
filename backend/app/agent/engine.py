@@ -213,8 +213,8 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
 
 [🚨 필수 작성 가이드라인 - Data Pinning & 100% 서식 준수]
 1. 위 [1차 공인 팩트 데이터]에 명시된 '현재가', '52주고저', 'PER', 'PBR', '배당수익률', '시가총액' 수치를 표와 본문에 1원도 바꾸지 말고 100% 그대로 기재하십시오.
-2. 사용자가 요청한 섹터({sec_name})에 완벽히 부합하는 종목들로 구성되었으므로 섹터 불일치 안내 문구를 적지 말고 바로 분석을 작성하십시오.
-3. 표에 'N/A'를 출력하지 마십시오. 모든 종목의 행과 열(투자포인트 3개, 리스크 2개, 매매전략, 종합비교표, 최종추천)을 완전히 채우십시오.
+2. 팩트 데이터에 없거나 'N/A'로 표기된 항목은 절대로 임의로 숫자를 지어내지 말고 'N/A' 또는 '확인 불가'로 기재하십시오.
+3. 모든 마크다운 표(Table)는 반드시 행마다 명확하게 줄바꿈(\\n)을 하여 테이블이 깨지지 않도록 하십시오.
 4. 사용자의 [E (Example)] 서식을 단 한 줄도 생략하지 말고 완벽하게 작성하십시오.
 """
         def _call_gemini():
@@ -245,10 +245,13 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
     if not final_report:
         final_report = _generate_menu_specific_report(menu_type, sector, style, top_n, symbol, budget, market_data, fin_data, news_list, multi_stocks)
 
+    # 🚨 마크다운 테이블 및 줄바꿈 엄격 후처리 필터
+    final_report = format_strict_markdown(final_report)
+
     sources = [
         {
             "category": "실시간 시세",
-            "title": f"키움증권 REST API & KRX 공식망 ({market_data.get('ticker', '034020.KS')})",
+            "title": f"키움증권 REST API & KRX 공식망 ({market_data.get('ticker', '290550.KQ')})",
             "url": "https://openapi.kiwoom.com",
             "timestamp": market_data.get("timestamp")
         },
@@ -279,6 +282,21 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
         "report": final_report,
         "sources": sources
     }
+
+def format_strict_markdown(text: str) -> str:
+    """마크다운 테이블 깨짐 및 줄바꿈 뭉개짐 자동 복원 필터"""
+    if not text:
+        return ""
+    import re
+    # 1. 파이프로 끝나는 셀과 바로 파이프로 시작하는 셀 사이 줄바꿈 보정 (예: "| |" -> "|\n|")
+    text = re.sub(r'\|\s*\|', '|\n|', text)
+    # 2. 마크다운 테이블 구분선 앞 줄바꿈 보정 (예: "| | :--- |" -> "|\n| :--- |")
+    text = re.sub(r'\|\s*\|\s*:', '|\n| :', text)
+    # 3. 헤더/서브타이틀 앞 줄바꿈 확보
+    text = re.sub(r'([^\n])(###?\s+)', r'\1\n\n\2', text)
+    # 4. 구분선(---) 앞 줄바꿈 확보
+    text = re.sub(r'([^\n])(\n---\n)', r'\1\n\2', text)
+    return text
 
 def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_n: int, symbol: str, budget: int, market: Dict[str, Any], fin: Dict[str, Any], news: List[Dict[str, Any]], multi_stocks: List[Dict[str, Any]]) -> str:
     """전 섹터 맞춤형 Fallback 렌더러"""
