@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { Play, Sparkles, RefreshCw, FileText } from 'lucide-react';
+import { Play, Sparkles, RefreshCw, FileText, Search } from 'lucide-react';
+
+const QUICK_STOCKS = [
+  { name: 'SAMG엔터', desc: '티니핑 IP/턴어라운드' },
+  { name: '디케이티', desc: '스마트폰/전자부품' },
+  { name: '케어젠', desc: '바이오 펩타이드' },
+  { name: '두산에너빌리티', desc: '원전/전력망' },
+  { name: '삼성전자', desc: '반도체/AI' },
+  { name: 'KODEX 방산TOP10', desc: 'K-방산 대표 ETF' },
+];
 
 export default function PromptInput({ onExecute, isAnalyzing }) {
-  const [prompt, setPrompt] = useState(
-`[AI 성장주 RICE 분석 요청]
-- 종목명: 리노공업 (또는 한미반도체, 엔비디아)
-- 요구 조건:
-  1. 실시간 주가 및 52주 최고/최저, PER/PBR 시가총액 팩트체크
-  2. Open DART 최근 사업보고서 기준 3개년 매출 및 영업이익 CAGR 산출
-  3. 한국경제/한국경제TV 등 화이트리스트 언론사 최신 모멘텀 기사 3건 요약
-  4. 외부 추측 배제 및 데이터 미존재 시 (N/A) 명시하여 최종 마크다운 표로 정리할 것`
-  );
+  const [prompt, setPrompt] = useState('SAMG엔터');
   const [forceRefresh, setForceRefresh] = useState(false);
 
   const handleSubmit = (e) => {
@@ -19,12 +20,16 @@ export default function PromptInput({ onExecute, isAnalyzing }) {
     onExecute(prompt, forceRefresh);
   };
 
+  const handleSelectQuickStock = (stockName) => {
+    setPrompt(stockName);
+  };
+
   return (
     <section className="glass-card">
       <div className="card-header-bar">
         <div className="card-title">
-          <FileText size={18} />
-          <span>RICE 프롬프트 입력</span>
+          <Search size={18} />
+          <span>종목명 또는 RICE 프롬프트 입력</span>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <label className="checkbox-label">
@@ -40,11 +45,39 @@ export default function PromptInput({ onExecute, isAnalyzing }) {
         </div>
       </div>
 
+      {/* 빠른 종목 원클릭 칩 */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
+        <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', alignSelf: 'center', marginRight: '4px' }}>
+          빠른 선택:
+        </span>
+        {QUICK_STOCKS.map((s) => (
+          <button
+            key={s.name}
+            type="button"
+            className="chip-btn"
+            style={{
+              background: prompt === s.name ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+              border: prompt === s.name ? '1px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.1)',
+              color: prompt === s.name ? '#60a5fa' : 'var(--text-color)',
+              padding: '4px 10px',
+              borderRadius: '16px',
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onClick={() => handleSelectQuickStock(s.name)}
+            disabled={isAnalyzing}
+          >
+            <strong>{s.name}</strong> <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>({s.desc})</span>
+          </button>
+        ))}
+      </div>
+
       <form onSubmit={handleSubmit} className="prompt-input-wrapper">
         <textarea
           className="prompt-textarea"
-          rows={6}
-          placeholder="목적에 맞게 생성된 RICE 프롬프트(AI 성장주, 고배당주, 턴어라운드주 등)를 여기에 붙여넣으세요..."
+          rows={3}
+          placeholder="종목명(예: SAMG엔터, 디케이티, 005930)만 입력하거나 맞춤형 RICE 프롬프트를 입력하세요..."
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           disabled={isAnalyzing}
@@ -52,7 +85,7 @@ export default function PromptInput({ onExecute, isAnalyzing }) {
 
         <div className="prompt-controls">
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            * Gemini 두뇌가 DART/공인뉴스/시세 Tool을 강제 호출하여 팩트 기반 리포트를 작성합니다.
+            * 종목명만 입력해도 한국거래소(KRX), DART 전자공시, FnGuide, 공인뉴스에서 실시간 팩트체크 리포트를 자동 작성합니다.
           </span>
           <button
             type="submit"
@@ -62,12 +95,12 @@ export default function PromptInput({ onExecute, isAnalyzing }) {
             {isAnalyzing ? (
               <>
                 <RefreshCw size={16} className="spin-animation" style={{ animation: 'spin 1s linear infinite' }} />
-                <span>팩트체크 수행 중...</span>
+                <span>공식 매체 실시간 수집 및 분석 중...</span>
               </>
             ) : (
               <>
                 <Play size={16} fill="currentColor" />
-                <span>분석 실행</span>
+                <span>공식 매체 실시간 분석</span>
               </>
             )}
           </button>
