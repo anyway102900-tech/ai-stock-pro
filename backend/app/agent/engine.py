@@ -370,18 +370,32 @@ E (Example) - 출력 형식
     }
 
 def format_strict_markdown(text: str) -> str:
-    """마크다운 테이블 깨짐 및 줄바꿈 뭉개짐 자동 복원 필터"""
+    """마크다운 테이블 깨짐 및 줄바꿈 뭉개짐 완벽 복원 필터"""
     if not text:
         return ""
     import re
-    # 1. 파이프로 끝나는 셀과 바로 파이프로 시작하는 셀 사이 줄바꿈 보정 (예: "| |" -> "|\n|")
-    text = re.sub(r'\|\s*\|', '|\n|', text)
-    # 2. 마크다운 테이블 구분선 앞 줄바꿈 보정 (예: "| | :--- |" -> "|\n| :--- |")
-    text = re.sub(r'\|\s*\|\s*:', '|\n| :', text)
-    # 3. 헤더/서브타이틀 앞 줄바꿈 확보
+    
+    # 1. 파이프로 끝나는 셀과 바로 파이프로 시작하는 셀 사이 줄바꿈 반복 복원
+    for _ in range(15):
+        prev = text
+        text = re.sub(r'\|\s*\|', '|\n|', text)
+        if text == prev:
+            break
+            
+    # 2. 구분선 앞/뒤 줄바꿈 보정
+    text = re.sub(r'(\|\s*)(:---[-:]*\|)', r'\1\n\2', text)
+    text = re.sub(r'(:---[-:]*\|)\s*(\|)', r'\1\n\2', text)
+    
+    # 3. 주요 키워드로 시작하는 행 앞 줄바꿈 분리
+    text = re.sub(r'(\|)\s*(\d{4}년|\*\*1단계|\*\*2단계|\*\*3단계|\*\*결과|\*\*현재가|\*\*52주|\*\*시가총액|\*\*PER|\*\*배당|\*\*외국인)', r'\1\n| \2', text)
+
+    # 4. 헤더/서브타이틀 앞 줄바꿈 확보
     text = re.sub(r'([^\n])(###?\s+)', r'\1\n\n\2', text)
-    # 4. 구분선(---) 앞 줄바꿈 확보
+    # 5. 구분선(---) 앞 줄바꿈 확보
     text = re.sub(r'([^\n])(\n---\n)', r'\1\n\2', text)
+    # 6. 블록 인용(> 📌) 앞 줄바꿈 확보
+    text = re.sub(r'([^\n])(\n?>\s*[📌🔬🛡️])', r'\1\n\n\2', text)
+    
     return text
 
 def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_n: int, symbol: str, budget: int, market: Dict[str, Any], fin: Dict[str, Any], news: List[Dict[str, Any]], multi_stocks: List[Dict[str, Any]]) -> str:

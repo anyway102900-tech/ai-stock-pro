@@ -4,6 +4,25 @@ import remarkGfm from 'remark-gfm';
 import { FileCheck, ExternalLink, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 export default function ReportViewer({ report, sources = [], isAnalyzing }) {
+  // 프론트엔드 자체 마크다운 테이블 및 줄바꿈 보정
+  const formatReportMarkdown = (text) => {
+    if (!text) return '';
+    let formatted = text;
+    // 파이프로 연속된 셀 사이 줄바꿈 복원
+    for (let i = 0; i < 15; i++) {
+      const prev = formatted;
+      formatted = formatted.replace(/\|\s*\|/g, '|\n|');
+      if (formatted === prev) break;
+    }
+    // 구분선 및 행 앞 줄바꿈 보정
+    formatted = formatted.replace(/(\|\s*)(:---[-:]*\|)/g, '$1\n$2');
+    formatted = formatted.replace(/(:---[-:]*\|)\s*(\|)/g, '$1\n$2');
+    formatted = formatted.replace(/(\|)\s*(\d{4}년|\*\*1단계|\*\*2단계|\*\*3단계|\*\*결과|\*\*현재가|\*\*52주|\*\*시가총액|\*\*PER|\*\*배당|\*\*외국인)/g, '$1\n| $2');
+    formatted = formatted.replace(/([^\n])(\n?>\s*[📌🔬🛡️])/g, '$1\n\n$2');
+    return formatted;
+  };
+
+  const processedReport = report ? formatReportMarkdown(report) : null;
   return (
     <section className="glass-card">
       <div className="card-header-bar">
@@ -36,7 +55,7 @@ export default function ReportViewer({ report, sources = [], isAnalyzing }) {
           </div>
         )}
 
-        {report && (
+        {processedReport && (
           <>
             <ReactMarkdown 
               remarkPlugins={[remarkGfm]}
@@ -53,7 +72,7 @@ export default function ReportViewer({ report, sources = [], isAnalyzing }) {
                 )
               }}
             >
-              {report}
+              {processedReport}
             </ReactMarkdown>
 
             {/* 1차 출처 증빙 섹션 */}
