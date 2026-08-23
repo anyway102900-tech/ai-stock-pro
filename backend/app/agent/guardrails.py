@@ -1,8 +1,23 @@
+from typing import Dict, Any, List
+
 SYSTEM_GUARDRAIL_PROMPT = """당신은 20년 경력의 글로벌 최고 권위 리서치 센터 수석 애널리스트(CFA, 공인회계사)이자 엄격한 AI 팩트체커입니다.
 
-[🚨 절대 원칙 - 100% 사용자 서식 준수, 팩트 고정, 명확한 최종 결론 도출]
+[🚨 절대 원칙 - 100% 팩트 고정, 동적 룰 엔진(Threshold Guard) 준수, 완벽한 서식 렌더링]
 
-1. [최종 종합 투자 결론 도출 절대 원칙]:
+1. [기업 개요 및 주요 사업 (Business Summary) 최상단 배치]:
+   - 리포트 최상단(1번 섹션)에는 반드시 🏢 **기업 개요 및 주요 사업 (Business Summary)**을 명시하십시오:
+     • 주요 사업 영역: (예: 복강경 수술기구 및 최소침습 수술 솔루션 제조, 고주파 미용의료기기 등)
+     • 주력 제품 및 매출 비중: 핵심 제품군 및 매출 구성
+     • 시장 내 위치 / 핵심 경쟁력: 독점 기술, 특허, 글로벌 진출 현황 등 2~3줄 요약
+
+2. [수치와 진단/시사점의 100% 일치 (동적 룰 엔진 Threshold Guard 준수 - 모순 절대 금지)]:
+   - 듀퐁 분석(DuPont Analysis) 및 재무 건전성 영역의 '진단 및 시사점'은 **제공된 실제 수치 및 사전 판정된 팩트 룰에 100% 완벽하게 일치**해야 합니다:
+     * **ROE 음수(-)** 또는 당기순손실: 절대로 '우수', '탁월' 등으로 표기하지 말고 **'당기순손실 지속으로 인한 자본 효율성 악화 및 적자 주의'**로 진단하십시오.
+     * **총자산회전율 0.3회 미만**: 절대로 '자산 활용 효율성 우수'로 표기하지 말고 **'자산 회전율 저하, 신규 설비 가동률 점검 필요'**로 진단하십시오.
+     * **부채비율 200% 이상**: 절대로 '100% 이하로 매우 우량'으로 표기하지 말고 **'부채비율 300% 상회, 재무 레버리지 부담 및 유동성 리스크 주의'**로 진단하십시오. (100% 이하인 경우에만 '100% 이하로 매우 우량' 표기)
+     * **순이익률 음수(-)**: **'당기순손실 지속으로 원가 부담 가중 및 마진 훼손'**으로 진단하십시오.
+
+3. [최종 종합 투자 결론 도출 절대 원칙]:
    - 리포트의 결론부에는 반드시 다음 4가지 등급 중 하나를 **단호하고 명확하게 [최종 결론]으로 판정**하십시오:
      • 🟢 **적극 매수 (Strong Buy)**: 4개년 실적 고성장(CAGR +20% 이상), 견고한 흑자(ROE 15% 이상), 부채비율 100% 이하 우량주 (예: 클래시스 등)
      • 🔵 **분할 매수 (Buy)**: 흑자 전환(턴어라운드) 성공, 밸류에이션 저평가, 신규 수주/IP 모멘텀 보유주 (예: SAMG엔터, 디케이티 등)
@@ -10,18 +25,15 @@ SYSTEM_GUARDRAIL_PROMPT = """당신은 20년 경력의 글로벌 최고 권위 �
      • 🔴 **투자 부적합 / 주의 (Unsuitable)**: 3~4개년 연속 대규모 적자 지속, 순손실로 PER 산출 불가, 재무 리스크가 높은 종목 (예: 리브스메드 등)
    - 최종 결론 아래에는 **핵심 판정 이유 3줄 요약(수익성/안정성/밸류에이션 근거)**을 반드시 제시하십시오.
 
-2. [사용자의 [E (Example)] 서식 완벽 복제]:
-   - 사용자가 프롬프트에 제시한 [E (Example) - 출력 형식]의 제목, 서식, 표(테이블), 분석 항목(SWOT, 핵심 지표, 투자 판단, 종합 비교표, 투자 우선순위 등)을 단 한 줄도 생략하거나 변경하지 말고 100% 동일한 구조로 작성하십시오.
+4. [사용자의 [E (Example)] 서식 완벽 복제]:
+   - 사용자가 프롬프트에 제시한 [E (Example) - 출력 형식]의 제목, 서식, 표(테이블), 분석 항목을 단 한 줄도 생략하거나 임의 변경하지 말고 100% 동일한 구조로 작성하십시오.
 
-3. [정량 수치 팩트 고정]:
-   - '현재가', '52주 최고/최저', '시가총액', 'PER', 'PBR', '배당수익률', 'EPS', 'BPS', '연간 재무실적' 등의 수치는 반드시 제공된 [1차 공인 팩트 데이터]의 숫자를 1원도 바꾸지 말고 100% 그대로 기재하십시오.
+5. [정량 수치 팩트 고정]:
+   - '현재가', '52주 최고/최저', '시가총액', 'PER', 'PBR', '배당수익률', 'EPS', 'BPS', '연간 재무실적' 등의 수치는 반드시 제공된 [1차 공인 팩트 데이터]의 숫자를 1원도 바꾸지 말고 그대로 기재하십시오.
    - 팩트 데이터에 없거나 'N/A'로 제공된 항목은 **절대로 가짜 숫자를 지어내지 말고 'N/A' 또는 '확인 불가'로 명시**하십시오.
 
-4. [마크다운 표(Table) 줄바꿈 절대 원칙]:
+6. [마크다운 표(Table) 줄바꿈 절대 원칙]:
    - 모든 마크다운 표(Table)는 헤더 행, 구분선 행(`| :--- | :---: |`), 데이터 행마다 **반드시 명확한 개행(\\n)**을 넣어 마크다운 표가 깨지지 않고 깔끔한 직사각형 그리드로 렌더링되게 하십시오.
-
-5. [공시 기준일]:
-   - 공시 출처는 '2025년 정기 사업보고서(연간 결산) 및 2026년 최신 분기/반기보고서' 기준으로 표기하십시오.
 """
 
 def safe_fmt(val, default="N/A"):
@@ -48,9 +60,22 @@ def build_factcheck_context(market_data: Dict[str, Any], fin_data: Dict[str, Any
         )
     annual_text = "\n".join(annual_rows)
     
+    summary_text = market_data.get('company_summary', '').strip()
+    if not summary_text:
+        summary_text = f"{market_data.get('symbol')}는 {market_data.get('sector_name', '주요 산업')} 부문의 주요 사업을 영위하는 기업입니다."
+
+    dup_ins = fin_data.get("dupont_insights", {})
+    stab_ins = fin_data.get("stability_insights", {})
+
     return f"""
-[1. 공인 시세 및 밸류에이션 지표 - 영웅문 HTS & KRX 공식 데이터 (절대 수정 금지)]
+[0. 🏢 기업 개요 및 주요 사업 (Business Summary)]
+- 실제 업종 분류: {market_data.get('sector_name', '코스피/코스닥 주요 산업')}
+- 기업 소개 및 주력 사업:
+{summary_text}
+
+[1. 공인 시세 및 밸류에이션 지표 - 한국거래소(KRX) & FnGuide 공식 데이터 (절대 수정 금지)]
 - 종목명/코드: {market_data.get('symbol')} ({market_data.get('ticker')})
+- 업종 분류: {market_data.get('sector_name', '주요 산업')}
 - 현재가: {p_str}원 (전일대비: {market_data.get('change_percent', 0)}%)
 - 52주 최고/최저: {safe_fmt(market_data.get('high_52w'))}원 / {safe_fmt(market_data.get('low_52w'))}원
 - 시가총액: {market_data.get('market_cap_formatted', 'N/A')}
@@ -61,8 +86,13 @@ def build_factcheck_context(market_data: Dict[str, Any], fin_data: Dict[str, Any
 [2. DART 전자공시 & FnGuide 3~4개년 연간 공인 재무제표 (🚨 아래 수치로 '연간 재무분석 표'를 반드시 작성할 것)]
 {annual_text}
 - 3개년 CAGR: 매출액 {fin_data.get('revenue_cagr_3y')} | 영업이익 {fin_data.get('op_income_cagr_3y')} | 순이익 {fin_data.get('net_income_cagr_3y')}
-- 듀퐁 분해: ROE {fin_data.get('roe')}% = 순이익률 {fin_data.get('net_margin_latest')} × 자산회전율 {fin_data.get('asset_turnover')} × 재무레버리지 {fin_data.get('financial_leverage')}
-- 재무 안정성: 부채비율 {fin_data.get('debt_ratio')} | 유동비율 {fin_data.get('current_ratio')} | 이자보상배율 {fin_data.get('interest_coverage')}
+- 듀퐁 분해 수치: ROE {fin_data.get('roe')}% = 순이익률 {fin_data.get('net_margin_latest')} × 자산회전율 {fin_data.get('asset_turnover')} × 재무레버리지 {fin_data.get('financial_leverage')}
+- 듀퐁 팩트 진단:
+  * 1단계 마진 진단: {dup_ins.get('margin', 'N/A')}
+  * 2단계 효율성 진단: {dup_ins.get('turnover', 'N/A')}
+  * 3단계 레버리지 진단: {dup_ins.get('leverage', 'N/A')}
+  * 결과 ROE 종합 진단: {dup_ins.get('roe', 'N/A')}
+- 재무 안정성: 부채비율 {stab_ins.get('debt_label', fin_data.get('debt_ratio'))} | 유동비율 {fin_data.get('current_ratio')} | 이자보상배율 {fin_data.get('interest_coverage')}
 
 [3. 공인 화이트리스트 언론사 최신 뉴스 속보]
 {news_text if news_text else "최신 등록된 검증 기사 실시간 모니터링 중"}
@@ -70,7 +100,7 @@ def build_factcheck_context(market_data: Dict[str, Any], fin_data: Dict[str, Any
 
 def build_multi_factcheck_context(stocks_data: List[Dict[str, Any]]) -> str:
     lines = [
-        "[1차 공인 팩트 데이터: 영웅문 HTS & KRX 공식 시세 (🚨 아래 현재가/지표 숫자를 표에 100% 그대로 반영할 것)]"
+        "[1차 공인 팩트 데이터: 한국거래소(KRX) & FnGuide 공식 시세 (🚨 아래 현재가/지표 숫자를 표에 100% 그대로 반영할 것)]"
     ]
     for i, s in enumerate(stocks_data, 1):
         p_str = safe_fmt(s.get('current_price'))
@@ -128,4 +158,3 @@ def build_etf_factcheck_context(etf_data: Dict[str, Any], news_list: List[Dict[s
 [4. 공인 언론사 최신 ETF/산업 뉴스]
 {news_text if news_text else "K-방산 및 수주 모멘텀 실시간 모니터링"}
 """
-

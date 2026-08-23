@@ -8,7 +8,7 @@ from .prompt_parser import parse_rice_prompt
 from .guardrails import SYSTEM_GUARDRAIL_PROMPT, build_factcheck_context, build_multi_factcheck_context, build_etf_factcheck_context, safe_fmt
 from ..tools.market_data import fetch_market_data, fetch_top_screening_stocks
 from ..tools.etf_data import fetch_etf_data
-from ..tools.dart_disclosure import fetch_financial_facts
+from ..tools.dart_disclosure import fetch_financial_facts, get_dupont_insights, get_stability_insights
 from ..tools.news_collector import fetch_whitelist_news
 
 # 최신 Google GenAI 클라이언트 초기화
@@ -38,7 +38,7 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
     yield {
         "type": "log",
         "tag": "PARSER",
-        "message": "RICE 프롬프트 정밀 분석: [Role, Instruction, Context, Example] 파싱 및 섹터 감지 중...",
+        "message": "RICE 프롬프트 정밀 분석: [Role, Instruction, Context, Example] 파싱 및 종목 식별 중...",
         "level": "info"
     }
     await asyncio.sleep(0.08)
@@ -52,23 +52,15 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
     budget = parsed["budget"]
     
     sector_labels = {
-        "ENERGY": "에너지 (태양광/풍력/원자력/수소)",
-        "BATTERY": "2차전지 & 배터리 소재",
+        "ENERGY": "에너지 (원자력/신재생)",
+        "BATTERY": "2차전지 & 소재",
         "BIO": "바이오 & 헬스케어",
-        "DEFENSE": "방산 & 조선 항공우주",
+        "DEFENSE": "방산 & 조선 우주항공",
         "AUTO": "자동차 & 자율주행",
-        "AI": "AI & 반도체 소부장",
-        "PLATFORM": "플랫폼 & IT 서비스"
+        "AI": "반도체 & IT 서비스",
+        "PLATFORM": "플랫폼 & 콘텐츠"
     }
-    sec_name = sector_labels.get(sector, "AI & 반도체")
-
-    yield {
-        "type": "log",
-        "tag": "PARSER",
-        "message": f"섹터 확정: [{sec_name}] | 유형: {'가치주' if style == 'VALUE' else '성장주'} TOP {top_n} | 모드: {'멀티 스크리닝' if menu_type == 'DISCOVERY' else symbol}",
-        "level": "info"
-    }
-    await asyncio.sleep(0.08)
+    sec_name = sector_labels.get(sector, "코스닥/코스피 주요 산업")
 
     multi_stocks = []
     market_data = {}
@@ -110,7 +102,7 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
         yield {
             "type": "log",
             "tag": "NEWS",
-            "message": f"공인 언론사 최신 K-방산/ETF 수주 모멘텀 기사 {len(news_list)}건 확보 및 검증 완료",
+            "message": f"공인 언론사 최신 ETF 수주 모멘텀 기사 {len(news_list)}건 확보 및 검증 완료",
             "level": "news"
         }
         fact_context = build_etf_factcheck_context(etf_data, news_list)
@@ -148,7 +140,7 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
         yield {
             "type": "log",
             "tag": "MARKET",
-            "message": f"키움 REST & KRX 실시간 시세, DART 공시, 공인 뉴스를 비동기 병렬로 동시 수집 중 ({symbol})...",
+            "message": f"KRX 공식망, DART 공시, 기업 개요 및 공인 뉴스를 비동기 병렬로 동시 수집 중 ({symbol})...",
             "level": "market"
         }
         
@@ -158,6 +150,19 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
         news_task = asyncio.to_thread(fetch_whitelist_news, symbol, 4, force_refresh)
 
         market_data, fin_data, news_list = await asyncio.gather(market_task, fin_task, news_task)
+
+        # 실제 수집된 기업 고유의 업종/섹터명 및 종목명 사용
+        real_symbol = market_data.get('symbol', symbol)
+        real_sector = market_data.get('sector_name') or sec_name
+        sec_name = real_sector
+
+        yield {
+            "type": "log",
+            "tag": "PARSER",
+            "message": f"기업 정보 확정: [{real_symbol}] | 업종 분류: [{real_sector}] | 모드: 정밀 팩트체크",
+            "level": "info"
+        }
+        await asyncio.sleep(0.04)
 
         price_val = market_data.get('current_price')
         price_str = f"{price_val:,}원" if isinstance(price_val, (int, float)) else str(price_val)
@@ -190,7 +195,7 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
     yield {
         "type": "log",
         "tag": "GUARD",
-        "message": f"최적화 하이브리드 엔진: {sec_name} 영웅문 HTS 확정 시세 + DART 전자공시 팩트체크 가드레일 주입",
+        "message": f"팩트체크 가드레일 주입: [{sec_name}] 1차 공인 데이터 Pinning & 듀퐁 진단 룰 주입",
         "level": "guard"
     }
     await asyncio.sleep(0.08)
@@ -198,7 +203,7 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
     yield {
         "type": "log",
         "tag": "SUCCESS",
-        "message": "Gemini 2.5 초고속 두뇌가 공인 시세(Data Pinning)를 기반으로 100% 매칭 리포트 작성 중...",
+        "message": f"Gemini 2.5 초고속 두뇌가 [{market_data.get('symbol', symbol)}] 100% 매칭 리포트 작성 중...",
         "level": "success"
     }
 
@@ -218,8 +223,8 @@ E (Example) - 출력 형식
 📋 [{target_sym}] 공식 매체 팩트체크 정밀 리서치 리포트
 
 ---
-## 1. 기업 개요 및 핵심 사업 모델
-- [사업 모델, 시장 지위, 핵심 IP/제품 경쟁력 2~3줄 요약]
+## 1. 🏢 기업 개요 및 핵심 사업 모델
+- [사업 모델, 주요 제품/서비스, 시장 지위 및 경쟁력 2~3줄 명확 요약]
 
 ---
 ## 2. 📊 실시간 시세 및 공인 밸류에이션 지표 (KRX & FnGuide)
@@ -235,19 +240,34 @@ E (Example) - 출력 형식
 ---
 ## 3. 📈 4개년 연간 공인 재무제표 추이 (DART 전자공시 결산)
 | 회계연도 | 매출액 | 영업이익 | 당기순이익 | 영업이익률(OPM) | ROE | 부채비율 | EPS | PER |
-| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 
 > 📌 **성장성 및 턴어라운드 진단**: 3개년 매출 및 영업이익 CAGR 분석과 수익성 추이 해설
 
 ---
-## 4. 🔬 SWOT 심층 분석 (1차 공시 및 언론사 팩트 근거)
+## 4. 🔬 수익성 심층 진단 (듀퐁 분석: DuPont Analysis)
+| 듀퐁 분해 3요소 | 수치 | 진단 및 시사점 (수치에 100% 일치) |
+| :--- | :---: | :--- |
+| **1단계: 순이익률 (마진)** | | |
+| **2단계: 총자산회전율 (효율성)** | | |
+| **3단계: 재무레버리지 (안정성)** | | |
+| **결과: ROE (자기자본이익률)** | | |
+
+---
+## 5. 🛡️ 재무 건전성 및 안정성
+- **부채비율**: [수치에 따른 정확한 평가]
+- **유동비율**: [단기 지급능력 평가]
+- **이자보상배율**: [금융비용 감당 여부 평가]
+
+---
+## 6. 🔬 SWOT 심층 분석 (1차 공시 및 언론사 팩트 근거)
 - **S (강점)**: [핵심 경쟁력 및 팩트 실적 근거] (출처: DART 사업보고서)
 - **W (약점)**: [재무적 한계 및 비용 요인] (출처: DART 전자공시)
 - **O (기회)**: [신사업, 글로벌 진출, 산업 수혜 모멘텀] (출처: 공인 뉴스/산업 리포트)
 - **T (위협)**: [전방 시장 리스크 및 경쟁 심화 요인] (출처: 시장 환경 분석)
 
 ---
-## 5. 🎯 팩트체크 최종 종합 판정 및 투자 의견
+## 7. 🎯 팩트체크 최종 종합 판정 및 투자 의견
 | 항목 | 내용 |
 | :--- | :--- |
 | **🏆 최종 종합 결론** | **[ 🟢 적극 매수 / 🔵 분할 매수 / 🟡 중립(관망) / 🔴 투자 부적합 ]** |
@@ -262,7 +282,7 @@ E (Example) - 출력 형식
 > 3. **투자 전략 제안**: [매수 진입, 관망, 또는 투자 회피 가이드]
 
 ---
-## 6. 💼 분할 매매 가격 가이드라인
+## 8. 💼 분할 매매 가격 가이드라인
 - **1차 매수 구간**: ￦...
 - **2차 추가 매수**: ￦...
 - **손절가 (Stop-Loss)**: ￦...
@@ -365,6 +385,21 @@ def format_strict_markdown(text: str) -> str:
     return text
 
 def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_n: int, symbol: str, budget: int, market: Dict[str, Any], fin: Dict[str, Any], news: List[Dict[str, Any]], multi_stocks: List[Dict[str, Any]]) -> str:
+    dup_ins = fin.get("dupont_insights", {})
+    if not dup_ins:
+        dup_ins = get_dupont_insights(
+            fin.get("net_margin_latest", "0.0%"),
+            fin.get("asset_turnover", 0.0),
+            fin.get("financial_leverage", 1.0),
+            fin.get("roe", 0.0)
+        )
+    stab_ins = fin.get("stability_insights", {})
+    if not stab_ins:
+        stab_ins = get_stability_insights(
+            fin.get("debt_ratio", "N/A"),
+            fin.get("current_ratio", "N/A"),
+            fin.get("interest_coverage", "N/A")
+        )
     """전 섹터 맞춤형 Fallback 렌더러"""
     sec_title = "에너지 (원자력/전력망/신재생)" if sector == "ENERGY" else ("2차전지" if sector == "BATTERY" else "AI 산업")
     
@@ -526,10 +561,10 @@ def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_
 ### 4. 🔬 듀퐁 분석 (DuPont Analysis: ROE 3요소 분해)
 | 분해 3단계 | 지표명 | 수치 | 진단 및 시사점 |
 | :---: | :--- | :---: | :--- |
-| **1단계** | **순이익률 (마진)** | **{fin.get('net_margin_latest', '12.65%')}** | 고부가가치 믹스 개선으로 가격 결정력 확보 |
-| **2단계** | **총자산회전율 (효율성)** | **{fin.get('asset_turnover', 0.72)}회** | 공장 가동률 및 자산 활용 효율성 우수 |
-| **3단계** | **재무레버리지 (안정성)** | **{fin.get('financial_leverage', 1.55)}배** | 적정 차입금 유지로 재무 위험 제한 |
-| **결과** | **ROE (자기자본이익률)** | **{fin.get('roe', 17.5)}%** | **동종업계 상위 10% 수준의 탁월한 자본 효율성** |
+| **1단계** | **순이익률 (마진)** | **{fin.get('net_margin_latest', 'N/A')}** | {dup_ins.get('margin', '수익성 분석 진행')} |
+| **2단계** | **총자산회전율 (효율성)** | **{fin.get('asset_turnover', 0.0)}회** | {dup_ins.get('turnover', '자산 효율성 분석 진행')} |
+| **3단계** | **재무레버리지 (안정성)** | **{fin.get('financial_leverage', 1.0)}배** | {dup_ins.get('leverage', '재무 레버리지 점검')} |
+| **결과** | **ROE (자기자본이익률)** | **{fin.get('roe', 0.0)}%** | **{dup_ins.get('roe', '자본 수익성 분석')}** |
 """
 
     # 단일 종목 리포트 템플릿 (3~4개년 연간 재무분석 표 및 듀퐁 분석 완비)
@@ -598,17 +633,17 @@ def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_
 ## 3. 🔬 수익성 심층 진단 (듀퐁 분석: DuPont Analysis)
 | 듀퐁 분해 3요소 | 수치 | 진단 및 시사점 |
 | :--- | :---: | :--- |
-| **1단계: 순이익률 (마진)** | **{fin.get('net_margin_latest', '12.5%')}** | 고부가가치 수주 확대로 가격 결정력 확보 |
-| **2단계: 총자산회전율 (효율성)** | **{fin.get('asset_turnover', 0.72)}회** | 공장 가동률 및 자산 활용 효율성 우수 |
-| **3단계: 재무레버리지 (안정성)** | **{fin.get('financial_leverage', 1.55)}배** | 적정 차입금 유지로 재무 위험 제한 |
-| **결과: ROE (자기자본이익률)** | **{fin.get('roe', 14.1)}%** | **동종업계 상위 10% 수준의 탁월한 자본 효율성** |
+| **1단계: 순이익률 (마진)** | **{fin.get('net_margin_latest', 'N/A')}** | {dup_ins.get('margin', 'N/A')} |
+| **2단계: 총자산회전율 (효율성)** | **{fin.get('asset_turnover', 0.0)}회** | {dup_ins.get('turnover', 'N/A')} |
+| **3단계: 재무레버리지 (안정성)** | **{fin.get('financial_leverage', 1.0)}배** | {dup_ins.get('leverage', 'N/A')} |
+| **결과: ROE (자기자본이익률)** | **{fin.get('roe', 0.0)}%** | **{dup_ins.get('roe', 'N/A')}** |
 
 ---
 
 ## 4. 🛡️ 재무 건전성 및 안정성
-- **부채비율**: **{fin.get('debt_ratio', '49.0%')}** (100% 이하로 매우 우량)
-- **유동비율**: **{fin.get('current_ratio', '210.5%')}** (단기 지급능력 안정)
-- **이자보상배율**: **{fin.get('interest_coverage', '18.5배')}** (영업이익으로 금융비용 충분히 감당)
+- **부채비율**: **{stab_ins.get('debt_label', fin.get('debt_ratio', 'N/A'))}**
+- **유동비율**: **{fin.get('current_ratio', 'N/A')}**
+- **이자보상배율**: **{fin.get('interest_coverage', 'N/A')}**
 
 ---
 

@@ -235,11 +235,41 @@ def _fetch_krx_naver_data(code: str) -> Dict[str, Any]:
     bps = parse_str_num(infos.get("bps"))
     foreign_rate = infos.get("foreignRate", "N/A")
 
+    # 🏢 기업 개요(Business Summary) 및 실제 업종(Sector) 크롤링
+    company_summary = ""
+    sector_name = ""
+    try:
+        from bs4 import BeautifulSoup
+        main_web_url = f"https://finance.naver.com/item/main.naver?code={code}"
+        web_res = requests.get(main_web_url, headers=headers, timeout=3)
+        if web_res.status_code == 200:
+            soup = BeautifulSoup(web_res.content.decode('utf-8', errors='ignore'), 'html.parser')
+            # 1. 기업 개요 문단 수집
+            s_box = soup.select_one('.summary_info')
+            if s_box:
+                p_tags = [p.get_text(strip=True) for p in s_box.find_all('p') if p.get_text(strip=True)]
+                company_summary = "\n".join(p_tags[:3])
+            
+            # 2. 실제 업종 분류 수집
+            sec_elem = soup.select_one('.trade_compare h4 em a') or soup.select_one('.h_th2 a')
+            if sec_elem:
+                sector_name = sec_elem.get_text(strip=True)
+    except Exception as e:
+        print(f"[COMPANY SUMMARY/SECTOR FETCH ERROR] {code}: {e}")
+
+    if not sector_name or sector_name == "코스닥/코스피 주요 산업":
+        # krx_stocks.json에서 업종 보강 시도
+        local_info = KRX_NAME_MAP.get(stock_name) or KRX_CODE_MAP.get(code)
+        if local_info and local_info.get("sector"):
+            sector_name = local_info.get("sector")
+        elif not sector_name:
+            sector_name = "코스피/코스닥 주요 산업"
+
     return {
         "symbol": stock_name,
         "ticker": f"{code}.{exchange_code}",
         "currency": "KRW",
-        "data_source": "KRX 공식 확정 시세 (영웅문 HTS 실시간 연동)",
+        "data_source": "한국거래소(KRX) 공식 시세 & FnGuide 공인 데이터",
         "current_price": cur_price,
         "change_percent": chg_pct,
         "high_52w": high_52w if high_52w is not None else "N/A",
@@ -252,6 +282,8 @@ def _fetch_krx_naver_data(code: str) -> Dict[str, Any]:
         "foreign_rate": foreign_rate,
         "beta": 1.05,
         "dividend_yield": infos.get("dividendYieldRatio", "N/A"),
+        "company_summary": company_summary,
+        "sector_name": sector_name,
         "price_date": datetime.now().strftime("%Y-%m-%d"),
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "_from_cache": False,
