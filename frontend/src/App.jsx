@@ -34,12 +34,31 @@ export default function App() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 90000); // 90초 타임아웃
 
-      const response = await fetch(`${apiBaseUrl}/api/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, force_refresh: forceRefresh }),
-        signal: controller.signal
-      });
+      let response = null;
+      try {
+        response = await fetch(`${apiBaseUrl}/api/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, force_refresh: forceRefresh }),
+          signal: controller.signal
+        });
+      } catch (err) {
+        console.warn('1차 API 호출 실패, 백업 로컬 주소로 재시도:', err);
+      }
+
+      // 외부 터널이나 프록시 405 오류 시 로컬 백엔드 직접 연결 폴백
+      if (!response || !response.ok) {
+        try {
+          response = await fetch(`http://127.0.0.1:8000/api/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, force_refresh: forceRefresh }),
+            signal: controller.signal
+          });
+        } catch (err) {
+          console.error('로컬 백엔드 직접 연결 실패:', err);
+        }
+      }
 
       clearTimeout(timeoutId);
 
