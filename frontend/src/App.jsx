@@ -62,7 +62,7 @@ export default function App() {
 
       clearTimeout(timeoutId);
 
-      if (response.ok) {
+      if (response && response.ok) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
