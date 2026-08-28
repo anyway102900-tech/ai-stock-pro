@@ -60,9 +60,9 @@ def parse_rice_prompt(prompt_text: str) -> Dict[str, Any]:
 
     # 3. 분석 대상 단일/대표 종목 추출
     symbol = None
-    # 6자리 종목코드 패턴 (예: 214370, 005930)
-    code_match = re.search(r'\b([0-9]{6})\b', prompt_text)
-    if code_match:
+    # 6자리 종목코드 패턴 (예: 214370, 0009K0, 005930)
+    code_match = re.search(r'\b([0-9A-Za-z]{6})\b', prompt_text)
+    if code_match and not code_match.group(1).isalpha():
         symbol = code_match.group(1)
 
     # '분석 대상:', '분석 대상 :', '종목명:', '대상:' 등의 다양한 패턴 매칭
@@ -83,7 +83,7 @@ def parse_rice_prompt(prompt_text: str) -> Dict[str, Any]:
 
     if not symbol:
         known_candidates = [
-            "KODEX 방산TOP10", "TIGER 미국S&P500", "ACE 미국S&P500", "TIGER 미국나스닥100",
+            "에임드바이오", "KODEX 방산TOP10", "TIGER 미국S&P500", "ACE 미국S&P500", "TIGER 미국나스닥100",
             "KODEX 반도체", "TIGER 2차전지테마", "KODEX 200", "ACE 미국30년국채액티브",
             "SAMG엔터", "SAMG", "에스에이엠지엔터", "대원미디어", "하이브", "JYP", "SM",
             "케어젠", "디케이티", "NAVER", "네이버", "카카오", "두산에너빌리티", "HD현대일렉트릭", "한화솔루션", "씨에스윈드", 
