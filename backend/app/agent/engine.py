@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from typing import AsyncGenerator, Dict, Any, List
 from google import genai
 from google.genai import types
@@ -213,14 +214,20 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
     
     effective_prompt = prompt_text
     if is_simple_input:
-        target_sym = market_data.get("symbol", symbol)
-        effective_prompt = f"""[관심종목 공식 매체 심층 분석 요청: {target_sym}]
+        target_sym_name = market_data.get("symbol", symbol)
+        target_ticker = market_data.get("ticker", "")
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        display_title = f"{target_sym_name} ({target_ticker})" if target_ticker and target_ticker != target_sym_name else target_sym_name
+
+        effective_prompt = f"""[관심종목 공식 매체 심층 분석 요청: {display_title}]
 R (Role) - 역할: 글로벌 투자은행 최고 권위 수석 리서치 애널리스트
-I (Instruction) - 지시사항: {target_sym} 종목에 대해 한국거래소(KRX), 금융감독원 Open DART, FnGuide, 공인 언론사 뉴스를 기반으로 심층 분석 리포트를 작성해주세요.
+I (Instruction) - 지시사항: {display_title} 종목에 대해 한국거래소(KRX), 금융감독원 Open DART, FnGuide, 공인 언론사 뉴스를 기반으로 심층 분석 리포트를 작성해주세요. 리포트 상단에 종목명/코드와 분석 기준일자({today_str})를 반드시 명기하십시오.
 
 E (Example) - 출력 형식
 
-📋 [{target_sym}] 공식 매체 팩트체크 정밀 리서치 리포트
+# 📋 [{display_title}] 공식 매체 팩트체크 정밀 리서치 리포트
+> 📅 **분석 기준일자**: {today_str} | **발행**: AI 주식분석 PRO Fact-Check Agent
 
 ---
 ## 1. 🏢 기업 개요 및 핵심 사업 모델
