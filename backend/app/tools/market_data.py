@@ -155,7 +155,7 @@ def resolve_ticker(symbol_or_name: str) -> str:
     if no_space in KNOWN_TICKERS:
         return KNOWN_TICKERS[no_space]
 
-    if len(cleaned) == 6 and cleaned.isdigit():
+    if len(cleaned) == 6 and (cleaned.isdigit() or (cleaned.isalnum() and any(c.isdigit() for c in cleaned))):
         return cleaned
     if cleaned.endswith(".KS") or cleaned.endswith(".KQ"):
         return cleaned[:6]
@@ -164,9 +164,9 @@ def resolve_ticker(symbol_or_name: str) -> str:
     try:
         url = f"https://search.naver.com/search.naver?query={cleaned}+주가"
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}, timeout=3)
-        codes = re.findall(r'item/main\.naver\?code=([0-9]{6})', res.text)
+        codes = re.findall(r'item/main\.naver\?code=([0-9A-Za-z]{6})', res.text)
         if not codes:
-            codes = re.findall(r'code=([0-9]{6})', res.text)
+            codes = re.findall(r'code=([0-9A-Za-z]{6})', res.text)
         if codes:
             found_code = codes[0]
             KNOWN_TICKERS[cleaned] = found_code
@@ -181,7 +181,7 @@ def resolve_ticker(symbol_or_name: str) -> str:
         search_items = res.get("result", {}).get("d", [])
         if search_items:
             found_code = search_items[0].get("cd", "")
-            if len(found_code) == 6 and found_code.isdigit():
+            if len(found_code) == 6 and (found_code.isdigit() or found_code.isalnum()):
                 KNOWN_TICKERS[cleaned] = found_code
                 return found_code
     except Exception:
@@ -190,7 +190,7 @@ def resolve_ticker(symbol_or_name: str) -> str:
     return cleaned
 
 def _is_krx(code: str) -> bool:
-    return len(code) == 6 and code.isdigit()
+    return len(code) == 6 and (code.isdigit() or (code.isalnum() and any(c.isdigit() for c in code)))
 
 def _fetch_krx_naver_data(code: str) -> Dict[str, Any]:
     """
