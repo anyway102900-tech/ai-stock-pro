@@ -311,7 +311,7 @@ E (Example) - 출력 형식
 4. [마크다운 표 줄바꿈]: 모든 마크다운 표(Table)는 헤더, 구분선, 데이터 행마다 반드시 명확하게 줄바꿈(\\n)을 하여 테이블이 깨지지 않도록 하십시오.
 """
         def _call_gemini():
-            models_to_try = ["gemini-2.5-flash", "gemini-2.5-pro"]
+            models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
             for model_name in models_to_try:
                 try:
                     resp = genai_client.models.generate_content(
