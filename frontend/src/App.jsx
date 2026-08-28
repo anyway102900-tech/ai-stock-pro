@@ -6,6 +6,14 @@ import ReportViewer from './components/ReportViewer';
 import ReportArchive from './components/ReportArchive';
 import './App.css';
 
+import krxStocks from './krx_stocks.json';
+
+// 종목코드 -> 종목명 역매핑 테이블 생성
+const CODE_TO_NAME = {};
+for (const [name, code] of Object.entries(krxStocks)) {
+  CODE_TO_NAME[code] = name;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('analyze'); // 'analyze' | 'archive'
   const [logs, setLogs] = useState([]);
@@ -14,6 +22,7 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [reportCount, setReportCount] = useState(0);
+  const [currentPromptStock, setCurrentPromptStock] = useState('');
 
   const apiBaseUrl = import.meta.env.VITE_API_URL || '';
 
@@ -52,18 +61,76 @@ export default function App() {
   };
 
   // 리포트 보관함에 저장하기 (.md)
-  const handleSaveReport = async (reportText) => {
+  const handleSaveReport = async (reportText, fallbackPrompt = '') => {
     if (!reportText) return;
 
-    // 종목명 및 메타데이터 추출
     let symbol = '종목분석';
-    const symbolMatch = reportText.match(/종목명(?:\/코드)?:\s*([^\s(]+)/);
-    if (symbolMatch) symbol = symbolMatch[1];
-
     let ticker = '';
-    const tickerMatch = reportText.match(/종목명(?:\/코드)?:\s*[^\s(]+\s*\(([^)]+)\)/);
-    if (tickerMatch) ticker = tickerMatch[1];
 
+    // 1. 프롬프트 텍스트에서 1차 종목명/코드 추출
+    const pText = fallbackPrompt || currentPromptStock;
+    if (pText) {
+      const codeInPrompt = pText.match(/\b([0-9]{6})\b/);
+      if (codeInPrompt && CODE_TO_NAME[codeInPrompt[1]]) {
+        ticker = codeInPrompt[1];
+        symbol = CODE_TO_NAME[codeInPrompt[1]];
+      } else {
+        const nameMatch = pText.match(/([가-힣A-Za-z0-9]+)(?:\s*\(([0-9]{6})\))?/);
+        if (nameMatch && nameMatch[1] && nameMatch[1].length > 1) {
+          symbol = nameMatch[1];
+          if (nameMatch[2]) ticker = nameMatch[2];
+        }
+      }
+    }
+
+    // 2. 리포트 본문 대제목에서 추출 (예: # 📋 [SAMG엔터 (419530)] 또는 📋 [클래시스])
+    const titleMatch = reportText.match(/📋\s*\[\s*([^(\]\s\n]+)(?:\s*\(([^)]+)\))?\s*\]/);
+    if (titleMatch) {
+      const rawSym = titleMatch[1].trim();
+      const rawTick = titleMatch[2] ? titleMatch[2].trim() : '';
+      if (/^\d{6}$/.test(rawSym) && CODE_TO_NAME[rawSym]) {
+        symbol = CODE_TO_NAME[rawSym];
+        ticker = rawSym;
+      } else if (rawSym !== '종목분석' && rawSym !== '종목') {
+        symbol = rawSym;
+        if (rawTick) ticker = rawTick;
+      }
+    }
+
+    // 3. 종목코드만 있는 경우 한글 종목명 역변환
+    if (/^\d{6}$/.test(symbol) && CODE_TO_NAME[symbol]) {
+      ticker = symbol;
+      symbol = CODE_TO_NAME[symbol];
+    }
+    if (!ticker && krxStocks[symbol]) {
+      ticker = krxStocks[symbol];
+    }
+
+    // 4. 가격 추출
+    let price = 'N/A';
+    const priceTableMatch = reportText.match(/\|\s*\*\*현재가\*\*\s*\|\s*([0-9,]+원?)/);
+    if (priceTableMatch) {
+      price = priceTableMatch[1].endsWith('원') ? priceTableMatch[1] : `${priceTableMatch[1]}원`;
+    } else {
+      const priceTextMatch = reportText.match(/(?:현재가|체결가)[^0-9\n]*([0-9,]+원)/);
+      if (priceTextMatch) price = priceTextMatch[1];
+    }
+
+    // 5. PER / PBR 추출
+    let per = 'N/A';
+    let pbr = 'N/A';
+    const perPbrMatch = reportText.match(/\|\s*\*\*PER\s*\/\s*PBR\*\*\s*\|\s*([0-9.]+배?)\s*\/\s*([0-9.]+배?)/);
+    if (perPbrMatch) {
+      per = perPbrMatch[1].includes('배') ? perPbrMatch[1] : `${perPbrMatch[1]}배`;
+      pbr = perPbrMatch[2].includes('배') ? perPbrMatch[2] : `${perPbrMatch[2]}배`;
+    } else {
+      const perMatch = reportText.match(/PER[^0-9\n]*([0-9.]+배)/);
+      if (perMatch) per = perMatch[1];
+      const pbrMatch = reportText.match(/PBR[^0-9\n]*([0-9.]+배)/);
+      if (pbrMatch) pbr = pbrMatch[1];
+    }
+
+    // 6. 투자 등급 추출
     let verdict = '분석완료';
     if (reportText.includes('적극 매수') || reportText.includes('Strong Buy')) verdict = '적극매수';
     else if (reportText.includes('분할 매수') || reportText.includes('Buy')) verdict = '분할매수';
@@ -74,6 +141,9 @@ export default function App() {
       symbol,
       ticker,
       verdict,
+      price,
+      per,
+      pbr,
       created_at: new Date().toLocaleString()
     };
 
@@ -100,6 +170,9 @@ export default function App() {
         symbol,
         ticker,
         verdict,
+        price,
+        per,
+        pbr,
         content: reportText,
         created_at: new Date().toLocaleString()
       };

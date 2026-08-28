@@ -13,6 +13,94 @@ import {
   Filter
 } from 'lucide-react';
 import ReportViewerModal from './ReportViewerModal';
+import krxStocks from '../krx_stocks.json';
+
+const CODE_TO_NAME = {};
+for (const [name, code] of Object.entries(krxStocks)) {
+  CODE_TO_NAME[code] = name;
+}
+
+function normalizeReport(r) {
+  let symbol = r.symbol || '';
+  let ticker = r.ticker || '';
+  let content = r.content || '';
+
+  // 1. 종목명이 '종목분석'이거나 비어있거나 숫자코드인 경우 본문/파일명/krxStocks에서 복구
+  if (!symbol || symbol === '종목분석' || symbol === '종목' || /^\d{6}$/.test(symbol)) {
+    // 1-1. content에서 대제목 매칭
+    if (content) {
+      const titleMatch = content.match(/📋\s*\[\s*([^(\]\s\n]+)(?:\s*\(([^)]+)\))?\s*\]/);
+      if (titleMatch) {
+        const s = titleMatch[1].trim();
+        const t = titleMatch[2] ? titleMatch[2].trim() : '';
+        if (/^\d{6}$/.test(s) && CODE_TO_NAME[s]) {
+          symbol = CODE_TO_NAME[s];
+          ticker = s;
+        } else if (s !== '종목분석' && s !== '종목') {
+          symbol = s;
+          if (t) ticker = t;
+        }
+      }
+    }
+
+    // 1-2. 파일명에서 매칭 (예: YYYYMMDD_HHMMSS_클래시스_적극매수.md)
+    if ((!symbol || symbol === '종목분석' || /^\d{6}$/.test(symbol)) && r.filename) {
+      const parts = r.filename.replace('.md', '').split('_');
+      if (parts.length >= 3) {
+        const candidate = parts[2];
+        if (candidate && candidate !== '종목분석' && candidate !== '종목') {
+          if (/^\d{6}$/.test(candidate) && CODE_TO_NAME[candidate]) {
+            symbol = CODE_TO_NAME[candidate];
+            ticker = candidate;
+          } else {
+            symbol = candidate;
+          }
+        }
+      }
+    }
+
+    // 1-3. ticker 코드가 있으면 이름으로 매핑
+    if ((!symbol || symbol === '종목분석') && ticker && CODE_TO_NAME[ticker]) {
+      symbol = CODE_TO_NAME[ticker];
+    }
+    // 1-4. symbol이 6자리 코드라면 이름으로 매핑
+    if (/^\d{6}$/.test(symbol) && CODE_TO_NAME[symbol]) {
+      ticker = symbol;
+      symbol = CODE_TO_NAME[symbol];
+    }
+  }
+
+  // 2. ticker 보정
+  if (!ticker && symbol && krxStocks[symbol]) {
+    ticker = krxStocks[symbol];
+  }
+
+  // 3. 지표 보정 (현재가, PER, PBR)
+  let price = r.price || 'N/A';
+  let per = r.per || 'N/A';
+  let pbr = r.pbr || 'N/A';
+
+  if (content && (price === 'N/A' || per === 'N/A' || pbr === 'N/A')) {
+    const priceTableMatch = content.match(/\|\s*\*\*현재가\*\*\s*\|\s*([0-9,]+원?)/);
+    if (priceTableMatch && price === 'N/A') {
+      price = priceTableMatch[1].endsWith('원') ? priceTableMatch[1] : `${priceTableMatch[1]}원`;
+    }
+    const perPbrMatch = content.match(/\|\s*\*\*PER\s*\/\s*PBR\*\*\s*\|\s*([0-9.]+배?)\s*\/\s*([0-9.]+배?)/);
+    if (perPbrMatch) {
+      if (per === 'N/A') per = perPbrMatch[1].includes('배') ? perPbrMatch[1] : `${perPbrMatch[1]}배`;
+      if (pbr === 'N/A') pbr = perPbrMatch[2].includes('배') ? perPbrMatch[2] : `${perPbrMatch[2]}배`;
+    }
+  }
+
+  return {
+    ...r,
+    symbol: symbol || '종목분석',
+    ticker,
+    price,
+    per,
+    pbr
+  };
+}
 
 export default function ReportArchive({ apiBaseUrl = '' }) {
   const [reports, setReports] = useState([]);
@@ -22,7 +110,7 @@ export default function ReportArchive({ apiBaseUrl = '' }) {
   const [activeReportDetail, setActiveReportDetail] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // 리포트 목록 불러오기 (백엔드 API + LocalStorage 병합)
+  // 리포트 목록 불러오기 (백엔드 API + LocalStorage 병합 및 실시간 종목명 보정)
   const fetchReports = async () => {
     setLoading(true);
     let apiReports = [];
@@ -31,18 +119,21 @@ export default function ReportArchive({ apiBaseUrl = '' }) {
       const res = await fetch(`${apiBaseUrl}/api/reports`);
       if (res.ok) {
         const data = await res.json();
-        apiReports = data.reports || [];
+        apiReports = (data.reports || []).map(normalizeReport);
       }
     } catch (err) {
       console.warn('API 리포트 불러오기 실패, 로컬 캐시 사용:', err);
     }
 
-    // LocalStorage 백업 데이터 병합 (동기화)
+    // LocalStorage 백업 데이터 병합 (동기화 및 자동 업그레이드)
     let localReports = [];
     try {
       const saved = localStorage.getItem('ai_stock_saved_reports');
       if (saved) {
-        localReports = JSON.parse(saved);
+        const rawLocal = JSON.parse(saved);
+        localReports = rawLocal.map(normalizeReport);
+        // 보정된 데이터로 로컬스토리지 자동 업그레이드
+        localStorage.setItem('ai_stock_saved_reports', JSON.stringify(localReports));
       }
     } catch (e) {
       console.error('LocalStorage 파싱 오류:', e);
@@ -53,7 +144,7 @@ export default function ReportArchive({ apiBaseUrl = '' }) {
     [...apiReports, ...localReports].forEach((r) => {
       const key = r.filename || `${r.symbol}_${r.created_at}`;
       if (!map.has(key)) {
-        map.set(key, r);
+        map.set(key, normalizeReport(r));
       }
     });
 
