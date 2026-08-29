@@ -145,12 +145,21 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
             "level": "market"
         }
         
-        # ⚡ 비동기 병렬 동시 수집 (속도 3배 단축)
+        # ⚡ 비동기 병렬 동시 수집 (속도 최적화 및 4.0초 타임아웃 안전망)
         market_task = asyncio.to_thread(fetch_market_data, symbol, force_refresh)
         fin_task = asyncio.to_thread(fetch_financial_facts, symbol, force_refresh)
         news_task = asyncio.to_thread(fetch_whitelist_news, symbol, 4, force_refresh)
 
-        market_data, fin_data, news_list = await asyncio.gather(market_task, fin_task, news_task)
+        try:
+            market_data, fin_data, news_list = await asyncio.wait_for(
+                asyncio.gather(market_task, fin_task, news_task),
+                timeout=4.0
+            )
+        except Exception as e:
+            print(f"[Gather Fallback] {e}")
+            market_data = fetch_market_data(symbol)
+            fin_data = {}
+            news_list = []
 
         # 실제 수집된 기업 고유의 업종/섹터명 및 종목명 사용
         real_symbol = market_data.get('symbol', symbol)
@@ -311,7 +320,9 @@ E (Example) - 출력 형식
 4. [마크다운 표 줄바꿈]: 모든 마크다운 표(Table)는 헤더, 구분선, 데이터 행마다 반드시 명확하게 줄바꿈(\\n)을 하여 테이블이 깨지지 않도록 하십시오.
 """
         def _call_gemini():
-            models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
+            if not genai_client:
+                return ""
+            models_to_try = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest"]
             for model_name in models_to_try:
                 try:
                     resp = genai_client.models.generate_content(
