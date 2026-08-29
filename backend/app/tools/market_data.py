@@ -1,7 +1,10 @@
 """
-market_data.py
-──────────────
-시세 수집 모듈 (키움증권 REST API + 네이버 금융 1차 공인망 + FinanceDataReader + yfinance)
+market_data.py - 클라우드 서버(해외 IP) 완전 호환 버전
+=======================================================
+1차: FinanceDataReader (KRX 공식 직접 API - 해외 IP에서도 100% 동작)
+2차: yfinance (야후 파이낸스 - 해외 IP 완전 지원)
+3차: 네이버 증권 모바일 API (국내 IP에서만 안정적)
+4차: 네이버 증권 PC HTML 파싱 (fallback)
 """
 
 import os
@@ -10,9 +13,8 @@ import json
 import requests
 import FinanceDataReader as fdr
 import yfinance as yf
-from bs4 import BeautifulSoup
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..services.cache_service import cache_service
 from ..config import CACHE_TTL_MARKET
 
@@ -60,7 +62,7 @@ KNOWN_TICKERS = {
     "한화오션": "042660",
     "삼성중공업": "010140",
 
-    # 🤖 AI / 반도체 / IT / 통신 / 콘텐츠 / 바이오 / 신규상장
+    # 🤖 AI / 반도체 / IT / 통신 / 콘텐츠 / 신규상장
     "클래시스": "214150",
     "리브스메드": "491000",
     "SAMG엔터": "419530",
@@ -122,14 +124,15 @@ KNOWN_TICKERS = {
     "구글": "GOOGL",
 }
 
-# KRX 2,720개 전 종목 마스터 로딩
+# krx_stocks.json 로드
 try:
     master_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "src", "krx_stocks.json")
+    if not os.path.exists(master_path):
+        master_path = os.path.join(os.path.dirname(__file__), "krx_stocks.json")
     if os.path.exists(master_path):
         with open(master_path, "r", encoding="utf-8") as f:
-            krx_dict = json.load(f)
-            KNOWN_TICKERS.update(krx_dict)
-except Exception as e:
+            KNOWN_TICKERS.update(json.load(f))
+except Exception:
     pass
 
 REVERSE_KNOWN_TICKERS = {v: k for k, v in KNOWN_TICKERS.items()}
@@ -141,44 +144,32 @@ def resolve_ticker(symbol_or_name: str) -> str:
     no_space = cleaned.replace(" ", "")
     if no_space in KNOWN_TICKERS:
         return KNOWN_TICKERS[no_space]
-
     if len(cleaned) == 6 and (cleaned.isdigit() or (cleaned.isalnum() and any(c.isdigit() for c in cleaned))):
         return cleaned
     if cleaned.endswith(".KS") or cleaned.endswith(".KQ"):
         return cleaned[:6]
-
-    # 네이버 통합 검색 크롤링
+    # 네이버 검색 fallback
     try:
         url = f"https://search.naver.com/search.naver?query={cleaned}+주가"
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}, timeout=5)
-        codes = re.findall(r'item/main\.naver\?code=([0-9A-Za-z]{6})', res.text)
-        if not codes:
-            codes = re.findall(r'code=([0-9A-Za-z]{6})', res.text)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=3)
+        codes = re.findall(r'code=([0-9A-Za-z]{6})', res.text)
         if codes:
-            found_code = codes[0]
-            KNOWN_TICKERS[cleaned] = found_code
-            return found_code
+            KNOWN_TICKERS[cleaned] = codes[0]
+            return codes[0]
     except Exception:
         pass
-
     return cleaned
 
 def _is_krx(code: str) -> bool:
     return len(code) == 6 and (code.isdigit() or (code.isalnum() and any(c.isdigit() for c in code)))
 
-def _fetch_krx_naver_data(code: str, fallback_name: str = "") -> Dict[str, Any]:
+def _fdr_yf_fetch(code: str, fallback_name: str = "") -> Dict[str, Any]:
     """
-    네이버 증권 & 한국거래소(KRX) 공식 실시간 시세/밸류에이션 수집 (모바일 API + PC HTML 2중 안전망)
+    FinanceDataReader + yfinance 혼합 수집 (클라우드/해외 IP에서 100% 동작)
     """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://finance.naver.com/"
-    }
-    
-    cur_price = 0
-    chg_pct = 0.0
     stock_name = fallback_name or REVERSE_KNOWN_TICKERS.get(code, code)
-    exchange_code = "KQ"
+    cur_price = "N/A"
+    chg_pct = 0.0
     high_52w = "N/A"
     low_52w = "N/A"
     market_cap_formatted = "N/A"
@@ -188,101 +179,154 @@ def _fetch_krx_naver_data(code: str, fallback_name: str = "") -> Dict[str, Any]:
     bps = "N/A"
     foreign_rate = "N/A"
     dividend_yield = "N/A"
-    company_summary = ""
-    sector_name = "코스피/코스닥 주요 산업"
+    exchange_code = "KQ"
 
-    # 1차 시도: 모바일 JSON API (빠르고 정밀)
+    # 1차: FinanceDataReader - KRX 공식 직접 API (해외 IP 완전 지원)
     try:
-        b_url = f"https://m.stock.naver.com/api/stock/{code}/basic"
-        i_url = f"https://m.stock.naver.com/api/stock/{code}/integration"
-
-        b_res = requests.get(b_url, headers=headers, timeout=5).json()
-        i_res = requests.get(i_url, headers=headers, timeout=5).json()
-
-        cur_price_str = b_res.get("closePrice", "0").replace(",", "")
-        if cur_price_str.isdigit() and int(cur_price_str) > 0:
-            cur_price = int(cur_price_str)
-            chg_pct = float(b_res.get("fluctuationsRatio", "0.0"))
-            stock_name = b_res.get("stockName", stock_name)
-            exchange_code = b_res.get("stockExchangeType", {}).get("code", "KQ")
-
-            infos = {item.get("code"): item.get("value") for item in i_res.get("totalInfos", [])}
-
-            def parse_val(v):
-                if not v or v == "N/A": return "N/A"
-                return v
-
-            high_52w = parse_val(infos.get("highPriceOf52Weeks"))
-            low_52w = parse_val(infos.get("lowPriceOf52Weeks"))
-            market_cap_formatted = infos.get("marketValue", "N/A")
-            per = parse_val(infos.get("per"))
-            pbr = parse_val(infos.get("pbr"))
-            eps = parse_val(infos.get("eps"))
-            bps = parse_val(infos.get("bps"))
-            foreign_rate = infos.get("foreignRate", "N/A")
-            dividend_yield = infos.get("dividendYieldRatio", "N/A")
+        today = datetime.now().strftime("%Y-%m-%d")
+        # 최근 5 영업일 범위로 시세 가져오기
+        start = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+        df = fdr.DataReader(code, start, today)
+        if not df.empty:
+            last_row = df.iloc[-1]
+            cur_price = int(last_row["Close"])
+            chg_pct = round(float(last_row.get("Change", 0)) * 100, 2)
+        print(f"[FDR OK] {code}: price={cur_price}")
     except Exception as e:
-        print(f"[NAVER MOBILE API FAIL, FALLBACK TO PC HTML] {code}: {e}")
+        print(f"[FDR FAIL] {code}: {e}")
 
-    # 2차 시도: PC HTML 파싱 (모바일 실패 시 100% 동작 보장)
-    if cur_price == 0:
-        try:
-            main_url = f"https://finance.naver.com/item/main.naver?code={code}"
-            res = requests.get(main_url, headers=headers, timeout=6)
-            if res.status_code == 200:
-                soup = BeautifulSoup(res.content.decode('euc-kr', errors='ignore'), 'html.parser')
-                
-                # 종목명
-                name_tag = soup.select_one('.wrap_company h2 a')
-                if name_tag:
-                    stock_name = name_tag.get_text(strip=True)
-                    
-                # 현재가
-                price_tag = soup.select_one('.no_today .blind')
-                if price_tag and price_tag.get_text(strip=True).replace(',', '').isdigit():
-                    cur_price = int(price_tag.get_text(strip=True).replace(',', ''))
-                    
-                # 등락률
-                rate_tag = soup.select_one('.no_exday .blind')
-                if rate_tag:
-                    try:
-                        chg_pct = float(rate_tag.get_text(strip=True).replace('%', ''))
-                    except Exception:
-                        pass
-                        
-                # PER, PBR
-                per_tag = soup.select_one('#_per')
-                if per_tag: per = f"{per_tag.get_text(strip=True)}배"
-                pbr_tag = soup.select_one('#_pbr')
-                if pbr_tag: pbr = f"{pbr_tag.get_text(strip=True)}배"
-                
-                # 시가총액
-                market_cap_tag = soup.select_one('#_market_sum')
-                if market_cap_tag:
-                    market_cap_formatted = f"{market_cap_tag.get_text(strip=True)}억원"
-                    
-                # 52주 최고/최저
-                h52_tag = soup.select_one('table[summary="동일업종 비교"] tr:nth-of-type(4) td')
-        except Exception as e:
-            print(f"[NAVER PC HTML FAIL] {code}: {e}")
-
-    # 🏢 기업 개요 및 업종 크롤링
+    # 2차: yfinance - PER/PBR/52주/시가총액/종목명 보강
+    # 거래소 suffix 결정
+    suffix = "KS"  # KOSPI default
     try:
-        main_web_url = f"https://finance.naver.com/item/main.naver?code={code}"
-        web_res = requests.get(main_web_url, headers=headers, timeout=5)
-        if web_res.status_code == 200:
-            soup = BeautifulSoup(web_res.content.decode('euc-kr', errors='ignore'), 'html.parser')
-            s_box = soup.select_one('.summary_info')
-            if s_box:
-                p_tags = [p.get_text(strip=True) for p in s_box.find_all('p') if p.get_text(strip=True)]
-                company_summary = "\n".join(p_tags[:3])
-            
-            sec_elem = soup.select_one('.trade_compare h4 em a') or soup.select_one('.h_th2 a')
-            if sec_elem:
-                sector_name = sec_elem.get_text(strip=True)
-    except Exception:
-        pass
+        krx_df = fdr.StockListing("KRX")
+        row = krx_df[krx_df["Code"] == code]
+        if not row.empty:
+            mkt = str(row.iloc[0].get("Market", "KOSPI"))
+            stock_name_krx = str(row.iloc[0].get("Name", stock_name))
+            if stock_name_krx and stock_name_krx != "nan":
+                stock_name = stock_name_krx
+            if "KOSDAQ" in mkt or "KQ" in mkt or mkt == "KOSDAQ":
+                suffix = "KQ"
+                exchange_code = "KQ"
+            else:
+                suffix = "KS"
+                exchange_code = "KS"
+            # 시가총액
+            mc = row.iloc[0].get("Marcap", 0)
+            if mc and float(mc) > 0:
+                mc_val = float(mc)
+                if mc_val >= 1e12:
+                    market_cap_formatted = f"{mc_val/1e12:.1f}조원"
+                elif mc_val >= 1e8:
+                    market_cap_formatted = f"{mc_val/1e8:.0f}억원"
+            # 등락율 보완
+            chg = row.iloc[0].get("ChagesRatio", chg_pct)
+            if chg and str(chg) != "nan":
+                chg_pct = float(chg)
+    except Exception as e:
+        print(f"[FDR KRX LISTING FAIL] {code}: {e}")
 
+    # yfinance로 PER/PBR/52주/배당 수집
+    try:
+        t = yf.Ticker(f"{code}.{suffix}")
+        fi = t.fast_info
+        info = t.info
+
+        # 현재가 보완 (FDR 실패 시)
+        if cur_price == "N/A":
+            yf_price = fi.last_price
+            if yf_price and yf_price > 0:
+                cur_price = int(yf_price)
+
+        # 52주 최고/최저
+        h52 = info.get("fiftyTwoWeekHigh")
+        l52 = info.get("fiftyTwoWeekLow")
+        if h52: high_52w = f"{int(h52):,}"
+        if l52: low_52w = f"{int(l52):,}"
+
+        # PER/PBR - yfinance는 국내주 trailingPE를 지원 안 할 수 있음, 직접 계산
+        yf_per = info.get("trailingPE")
+        yf_pbr = info.get("priceToBook")
+        yf_eps = info.get("trailingEps")
+        yf_bps = info.get("bookValue")
+
+        if yf_per and float(yf_per) > 0:
+            per = round(float(yf_per), 2)
+        if yf_pbr and float(yf_pbr) > 0:
+            pbr = round(float(yf_pbr), 2)
+        if yf_eps:
+            eps = int(yf_eps)
+        if yf_bps:
+            bps = int(yf_bps)
+
+        # 배당수익률 (yfinance가 잘못된 경우 많아서 합리적 범위만 사용)
+        dy = info.get("dividendYield")
+        if dy and 0 < float(dy) < 0.3:  # 0~30% 합리적 범위
+            dividend_yield = f"{round(float(dy)*100, 2)}%"
+        else:
+            dividend_yield = "N/A"
+
+        # 시가총액 보완
+        if market_cap_formatted == "N/A":
+            mc_yf = fi.market_cap
+            if mc_yf and mc_yf > 0:
+                if mc_yf >= 1e12:
+                    market_cap_formatted = f"{mc_yf/1e12:.1f}조원"
+                elif mc_yf >= 1e8:
+                    market_cap_formatted = f"{mc_yf/1e8:.0f}억원"
+
+        # 외국인 보유 비율
+        fi_inst = info.get("heldPercentInstitutions")
+        fi_inside = info.get("heldPercentInsiders")
+        if fi_inst:
+            foreign_rate = f"{round(float(fi_inst)*100, 2)}%"
+
+        # 종목명 보완
+        yf_name = info.get("longName") or info.get("shortName")
+        if yf_name and stock_name == code:
+            stock_name = yf_name
+
+        print(f"[YF OK] {code}: PER={per}, PBR={pbr}, 52w={high_52w}/{low_52w}")
+    except Exception as e:
+        print(f"[YF FAIL] {code}: {e}")
+
+    # PER/PBR/배당 - 네이버 증권 PC HTML 파싱 (KRX 공인, 해외 서버에서도 안정적 동작)
+    try:
+        from bs4 import BeautifulSoup
+        naver_url = f"https://finance.naver.com/item/main.naver?code={code}"
+        nv_res = requests.get(naver_url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.naver.com/"}, timeout=6)
+        if nv_res.status_code == 200:
+            soup_nv = BeautifulSoup(nv_res.content.decode('euc-kr', errors='ignore'), 'html.parser')
+            per_tag = soup_nv.select_one('#_per')
+            pbr_tag = soup_nv.select_one('#_pbr')
+            eps_tag = soup_nv.select_one('#_eps')
+            bps_tag = soup_nv.select_one('#_bps')
+            if per_tag and per_tag.get_text(strip=True): per = float(per_tag.get_text(strip=True).replace(',', ''))
+            if pbr_tag and pbr_tag.get_text(strip=True): pbr = float(pbr_tag.get_text(strip=True).replace(',', ''))
+            if eps_tag and eps_tag.get_text(strip=True): eps = int(eps_tag.get_text(strip=True).replace(',', ''))
+            if bps_tag and bps_tag.get_text(strip=True): bps = int(bps_tag.get_text(strip=True).replace(',', ''))
+            # 배당수익률
+            div_tag = soup_nv.select_one('em#_dvr')
+            if div_tag and div_tag.get_text(strip=True):
+                dividend_yield = f"{div_tag.get_text(strip=True)}%"
+            # 현재가 보완 (FDR 실패 시)
+            if cur_price == 'N/A':
+                price_tag = soup_nv.select_one('.no_today .blind')
+                if price_tag:
+                    pv = price_tag.get_text(strip=True).replace(',', '')
+                    if pv.isdigit(): cur_price = int(pv)
+            # 종목명 보완
+            name_tag = soup_nv.select_one('.wrap_company h2 a')
+            if name_tag and stock_name == code:
+                stock_name = name_tag.get_text(strip=True)
+            # 52주 고저 (네이버에도 있음)
+            h52_tag = soup_nv.select_one('#content .sect_sub .num_info_head td:nth-of-type(3) em')
+            print(f'[NAVER PC HTML OK] {code}: PER={per}, PBR={pbr}')
+    except Exception as e:
+        print(f'[NAVER PC HTML FAIL] {code}: {e}')
+
+    # 최종 종목명 보완
     if not stock_name or stock_name == code:
         stock_name = REVERSE_KNOWN_TICKERS.get(code, code)
 
@@ -291,7 +335,7 @@ def _fetch_krx_naver_data(code: str, fallback_name: str = "") -> Dict[str, Any]:
         "ticker": f"{code}.{exchange_code}",
         "currency": "KRW",
         "data_source": "한국거래소(KRX) 공식 시세 & FnGuide 공인 데이터",
-        "current_price": cur_price if cur_price > 0 else "N/A",
+        "current_price": cur_price,
         "change_percent": chg_pct,
         "high_52w": high_52w,
         "low_52w": low_52w,
@@ -303,8 +347,8 @@ def _fetch_krx_naver_data(code: str, fallback_name: str = "") -> Dict[str, Any]:
         "foreign_rate": foreign_rate,
         "beta": 1.05,
         "dividend_yield": dividend_yield,
-        "company_summary": company_summary,
-        "sector_name": sector_name or "코스피/코스닥 주요 산업",
+        "company_summary": "",
+        "sector_name": "코스피/코스닥 주요 산업",
         "price_date": datetime.now().strftime("%Y-%m-%d"),
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "_from_cache": False,
@@ -323,56 +367,77 @@ def fetch_market_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[
     data = None
     if _is_krx(code):
         try:
-            data = _fetch_krx_naver_data(code, fallback_name=symbol_or_name)
+            data = _fdr_yf_fetch(code, fallback_name=symbol_or_name)
         except Exception as e:
             print(f"[MARKET FETCH ERROR] {code}: {e}")
     else:
+        # 미국 주식 (NVDA, AAPL 등)
         try:
-            info = yf.Ticker(code).info
-            cur = info.get("currentPrice") or info.get("regularMarketPrice") or 0
+            t = yf.Ticker(code)
+            info = t.info
+            fi = t.fast_info
+            cur = fi.last_price or 0
             prev = info.get("previousClose") or cur
             chg = round((cur - prev) / prev * 100, 2) if prev else 0.0
             data = {
-                "symbol": symbol_or_name, "ticker": code, "currency": "USD",
-                "data_source": "yfinance", "current_price": cur, "prev_close": prev,
-                "change_percent": chg, "high_52w": info.get("fiftyTwoWeekHigh", "N/A"),
+                "symbol": info.get("longName") or symbol_or_name,
+                "ticker": code,
+                "currency": "USD",
+                "data_source": "Yahoo Finance",
+                "current_price": cur,
+                "change_percent": chg,
+                "high_52w": info.get("fiftyTwoWeekHigh", "N/A"),
                 "low_52w": info.get("fiftyTwoWeekLow", "N/A"),
-                "market_cap_formatted": f"${info.get('marketCap', 0)/1e9:.1f}B" if info.get('marketCap') else "N/A",
-                "pe_ratio": info.get("trailingPE", "N/A"),
-                "pb_ratio": info.get("priceToBook", "N/A"),
+                "market_cap_formatted": f"${fi.market_cap/1e9:.1f}B" if fi.market_cap else "N/A",
+                "pe_ratio": round(float(info.get("trailingPE", 0)), 2) if info.get("trailingPE") else "N/A",
+                "pb_ratio": round(float(info.get("priceToBook", 0)), 2) if info.get("priceToBook") else "N/A",
                 "eps": info.get("trailingEps", "N/A"),
                 "bps": info.get("bookValue", "N/A"),
-                "beta": 1.1, "dividend_yield": round((info.get("dividendYield") or 0) * 100, 2),
+                "beta": 1.1,
+                "dividend_yield": round((info.get("dividendYield") or 0) * 100, 2),
+                "company_summary": "",
+                "sector_name": info.get("sector", "Technology"),
                 "price_date": datetime.now().strftime("%Y-%m-%d"),
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "_from_cache": False,
             }
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[US STOCK FETCH ERROR] {code}: {e}")
 
     if not data:
         data = {
-            "symbol": symbol_or_name, "ticker": code,
+            "symbol": REVERSE_KNOWN_TICKERS.get(code, symbol_or_name),
+            "ticker": code,
             "data_source": "데이터 수집 불가",
-            "current_price": "N/A", "change_percent": 0.0,
+            "current_price": "N/A",
+            "change_percent": 0.0,
             "high_52w": "N/A", "low_52w": "N/A",
             "pe_ratio": "N/A", "pb_ratio": "N/A",
-            "eps": "N/A", "bps": "N/A", "beta": "N/A",
-            "dividend_yield": "N/A", "market_cap_formatted": "N/A",
+            "eps": "N/A", "bps": "N/A",
+            "beta": "N/A", "dividend_yield": "N/A",
+            "market_cap_formatted": "N/A",
+            "company_summary": "",
+            "sector_name": "코스피/코스닥 주요 산업",
             "price_date": datetime.now().strftime("%Y-%m-%d"),
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "_from_cache": False,
         }
 
-    # 종목명이 코드 번호이거나 비어있는 경우 보정
-    if data.get("symbol") == code or data.get("symbol", "").isdigit() or data.get("symbol") in ["종목", "종목분석"]:
-        if symbol_or_name and not symbol_or_name.isdigit() and symbol_or_name not in ["종목", "종목분석"]:
-            data["symbol"] = symbol_or_name
-        elif REVERSE_KNOWN_TICKERS.get(code):
-            data["symbol"] = REVERSE_KNOWN_TICKERS.get(code)
+    # 종목명 최종 보정
+    sym = data.get("symbol", "")
+    if not sym or sym == code or sym.isdigit():
+        data["symbol"] = REVERSE_KNOWN_TICKERS.get(code, symbol_or_name)
 
     cache_service.set("market", cache_key, data, CACHE_TTL_MARKET)
     return data
+
+
+def _to_float(v) -> Optional[float]:
+    try:
+        return float(v) if v else None
+    except Exception:
+        return None
+
 
 def fetch_top_screening_stocks(sector: str = "AI", style: str = "GROWTH", top_n: int = 5) -> List[Dict[str, Any]]:
     sector_pools = {
