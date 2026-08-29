@@ -9,6 +9,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 DART_API_KEY = os.getenv("DART_API_KEY", "")
 KIWOOM_APP_KEY = os.getenv("KIWOOM_APP_KEY", "")
 KIWOOM_APP_SECRET = os.getenv("KIWOOM_APP_SECRET", "")
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID", "")
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "")
 
 # 캐시 만료 시간 (초 단위)
 CACHE_TTL_MARKET = int(os.getenv("CACHE_TTL_MARKET", 900))       # 15분
