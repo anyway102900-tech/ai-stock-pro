@@ -49,7 +49,7 @@ def safe_fmt(val, default="N/A"):
 
 def build_factcheck_context(market_data: Dict[str, Any], fin_data: Dict[str, Any], news_list: List[Dict[str, Any]]) -> str:
     news_text = "\n".join([
-        f"- [{n.get('press', '언론사')}] {n.get('title')} ({n.get('published_at', '')}) - {n.get('snippet', '')}"
+        f"- [{n.get('press', '공인 언론')}] {n.get('title')} ({n.get('published_at', '')}) | 내용 요약: {n.get('summary', '') or n.get('snippet', '')} | 링크: {n.get('url', '')}"
         for n in news_list
     ])
     
