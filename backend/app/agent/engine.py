@@ -148,21 +148,24 @@ async def run_agent_pipeline(prompt_text: str, force_refresh: bool = False) -> A
             "level": "market"
         }
         
-        # ⚡ 비동기 병렬 동시 수집 (속도 최적화 및 4.0초 타임아웃 안전망)
+        # ⚡ 비동기 병렬 동시 수집 (속도 최적화 및 8.0초 타임아웃 안전망)
         market_task = asyncio.to_thread(fetch_market_data, symbol, force_refresh)
         fin_task = asyncio.to_thread(fetch_financial_facts, symbol, force_refresh)
-        news_task = asyncio.to_thread(fetch_whitelist_news, symbol, 4, force_refresh)
+        news_task = asyncio.to_thread(fetch_whitelist_news, symbol, 5, force_refresh)
 
         try:
-            market_data, fin_data, news_list = await asyncio.wait_for(
-                asyncio.gather(market_task, fin_task, news_task),
-                timeout=4.0
+            results = await asyncio.wait_for(
+                asyncio.gather(market_task, fin_task, news_task, return_exceptions=True),
+                timeout=8.0
             )
+            market_data = results[0] if isinstance(results[0], dict) else fetch_market_data(symbol)
+            fin_data = results[1] if isinstance(results[1], dict) else {}
+            news_list = results[2] if isinstance(results[2], list) and len(results[2]) > 0 else fetch_whitelist_news(symbol, 5)
         except Exception as e:
             print(f"[Gather Fallback] {e}")
             market_data = fetch_market_data(symbol)
             fin_data = {}
-            news_list = []
+            news_list = fetch_whitelist_news(symbol, 5)
 
         # 실제 수집된 기업 고유의 업종/섹터명 및 종목명 사용
         real_symbol = market_data.get('symbol', symbol)
@@ -642,6 +645,11 @@ def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_
         )
     quarter_table_str = "\n".join(quarter_rows) if quarter_rows else "| **2026년 2Q** | 실적 집계 중 | N/A | N/A | N/A | N/A | N/A | N/A |"
 
+    sym_name = market.get('symbol') or symbol
+    if not sym_name or sym_name.isdigit() or sym_name == market.get('ticker'):
+        from ..tools.market_data import REVERSE_KNOWN_TICKERS
+        sym_name = REVERSE_KNOWN_TICKERS.get(market.get('ticker', ''), sym_name)
+
     # 최신 공인 화이트리스트 뉴스 테이블
     news_rows = []
     for n in (news or [])[:6]:
@@ -650,7 +658,7 @@ def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_
         title = n.get("title", "")
         summary = n.get("summary", "") or n.get("snippet", "") or "주요 수주 및 실적 모멘텀 분석"
         news_rows.append(f"| {press} | {pdate} | {title} | {summary} |")
-    news_table_str = "\n".join(news_rows) if news_rows else f"| 공인 언론사 | 2026-08 | {symbol} 최신 수주 및 실적 공시 모니터링 중 | 화이트리스트 언론사 팩트체크 실시간 진행 |"
+    news_table_str = "\n".join(news_rows) if news_rows else f"| 공인 언론사 | 2026-08 | {sym_name} 최신 수주 및 실적 공시 모니터링 중 | 화이트리스트 언론사 팩트체크 실시간 진행 |"
     
     p = safe_num(market.get('current_price'), 0)
     h = safe_num(market.get('high_52w'), 0)
