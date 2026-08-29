@@ -21,10 +21,13 @@ if GEMINI_API_KEY:
         print(f"[GENAI CLIENT INIT ERROR] {e}")
 
 def safe_num(val, default=0):
-    if val is None or val == "N/A":
+    if val is None or val in ("N/A", "nan", "-"):
         return default
     try:
-        return int(float(val))
+        clean_val = re.sub(r"[^\d.-]", "", str(val))
+        if not clean_val or clean_val == "-":
+            return default
+        return int(float(clean_val))
     except Exception:
         return default
 
@@ -653,8 +656,8 @@ def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_
     h = safe_num(market.get('high_52w'), 0)
     l = safe_num(market.get('low_52w'), 0)
 
-    p_str = f"￦{p:,.0f}" if p > 0 else "N/A"
-    hl_str = f"￦{h:,.0f} / ￦{l:,.0f}" if h > 0 and l > 0 else "N/A"
+    p_str = f"￦{p:,}" if p > 0 else "N/A"
+    hl_str = f"￦{h:,} / ￦{l:,}" if (h > 0 and l > 0) else "N/A"
     
     # 팩트 기반 최종 판정 로직
     roe_val = safe_num(fin.get('roe', 0), 0)
@@ -677,11 +680,16 @@ def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_
         reason_2 = "현재 주가 밸류에이션 매력 구간 및 하방 경직성 확보"
         reason_3 = "분할 매수 가이드라인에 따른 조정 시 비중 확대 전략 유효"
 
+    sym_name = market.get('symbol') or symbol
+    if not sym_name or sym_name.isdigit() or sym_name == market.get('ticker'):
+        from ..tools.market_data import REVERSE_KNOWN_TICKERS
+        sym_name = REVERSE_KNOWN_TICKERS.get(market.get('ticker', ''), sym_name)
+
     business_summary = market.get('company_summary', '').strip()
     if not business_summary:
-        business_summary = f"{symbol}는 {market.get('sector_name', '코스피/코스닥 주요 산업')} 부문에서 핵심 기술력과 제품 경쟁력을 바탕으로 국내외 시장을 선도하는 기업입니다."
+        business_summary = f"{sym_name}는 {market.get('sector_name', '코스피/코스닥 주요 산업')} 부문에서 핵심 기술력과 제품 경쟁력을 바탕으로 국내외 시장을 선도하는 기업입니다."
 
-    return f"""# 📋 [{symbol} ({market.get('ticker', '')})] 공식 매체 팩트체크 정밀 리서치 리포트
+    return f"""# 📋 [{sym_name} ({market.get('ticker', '')})] 공식 매체 팩트체크 정밀 리서치 리포트
 > 📅 **분석 기준일자**: {market.get('price_date', '2026-08-29')} | **발행**: AI 주식분석 PRO Fact-Check Agent
 
 ---
@@ -696,7 +704,7 @@ def _generate_menu_specific_report(menu_type: str, sector: str, style: str, top_
 | 지표 | 수치 | 평가 | 데이터 출처 |
 | :--- | :--- | :--- | :--- |
 | **현재가** | **￦{p:,}** ({'+' if market.get('change_percent', 0) > 0 else ''}{market.get('change_percent', 0)}%) | 실시간 체결가 | 한국거래소(KRX) |
-| **52주 최고 / 최저** | ￦{h:,} / ￦{l:,} | 변동폭 분석 | 한국거래소(KRX) |
+| **52주 최고 / 최저** | {hl_str} | 변동폭 분석 | 한국거래소(KRX) |
 | **시가총액** | **{market.get('market_cap_formatted', 'N/A')}** | 규모 평가 | 한국거래소(KRX) |
 | **PER / PBR** | **{market.get('pe_ratio', 'N/A')}배** / **{market.get('pb_ratio', 'N/A')}배** | FnGuide 공인 밸류에이션 | FnGuide |
 | **배당수익률 / EPS** | **{str(market.get('dividend_yield', 'N/A')).rstrip('%')}%** / **￦{safe_fmt(market.get('eps', 'N/A'))}** | 주주환원 및 주당순익 | DART 사업보고서 |
