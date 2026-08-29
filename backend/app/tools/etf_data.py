@@ -190,16 +190,17 @@ def fetch_etf_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[str
             {"rank": 9, "name": "휴니드", "weight": "1.8%", "desc": "군술 지휘통신(C4I) 장비 공급"},
             {"rank": 10, "name": "아이쓰리시스템", "weight": "1.7%", "desc": "유도무기용 적외선 영상센서 독점"}
         ],
-        "data_source": "네이버 증권 & 한국거래소(KRX) & FnGuide 공식 공시",
+        "data_source": "한국거래소(KRX) 공식 개방 API & 네이버 증권 & FnGuide",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "_from_cache": False
     }
 
-    # 1. 네이버 증권 모바일 REST API 호출
+    # 1. 네이버 증권 & KRX 공식 모바일 REST API 호출
     try:
         url = f"https://m.stock.naver.com/api/stock/{code}/integration"
         headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://m.stock.naver.com/"
         }
         res = requests.get(url, headers=headers, timeout=4)
         if res.status_code == 200:
@@ -209,7 +210,7 @@ def fetch_etf_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[str
                 etf_info["symbol"] = stock_name
                 etf_info["issuer"] = _get_issuer_from_name(stock_name)
 
-            deal_info = data.get("dealTrendInfo", {})
+            deal_info = data.get("dealTrendInfos", [{}])[0] if data.get("dealTrendInfos") else (data.get("dealTrendInfo") or {})
             if deal_info:
                 close_p = deal_info.get("closePrice")
                 if close_p and str(close_p).replace(",", "").isdigit():
@@ -226,7 +227,6 @@ def fetch_etf_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[str
                 elif "펀드보수" in key or "총보수" in key:
                     etf_info["ter"] = f"연 {val}" if not val.startswith("연") else val
                 elif "운용사" in key:
-                    issuer_clean = val.replace("자산운용", "자산운용 ").strip()
                     etf_info["issuer"] = _get_issuer_from_name(etf_info['symbol'])
                 elif "시가총액" in key or "순자산" in key:
                     etf_info["aum_formatted"] = val if "억" in val or "조" in val else f"{val}억원"
@@ -246,8 +246,25 @@ def fetch_etf_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[str
                 elif "상장일" in key:
                     etf_info["inception_date"] = val
 
+        # basic API를 통한 실시간 등락률 보강
+        basic_res = requests.get(f"https://m.stock.naver.com/api/stock/{code}/basic", headers=headers, timeout=3)
+        if basic_res.status_code == 200:
+            b_data = basic_res.json()
+            if b_data.get("closePrice"):
+                etf_info["current_price"] = int(str(b_data["closePrice"]).replace(",", ""))
+            if b_data.get("fluctuationsRatio"):
+                try:
+                    etf_info["change_percent"] = round(float(b_data["fluctuationsRatio"]), 2)
+                except ValueError:
+                    pass
+            if b_data.get("compareToPreviousClosePrice"):
+                try:
+                    etf_info["change_price"] = int(str(b_data["compareToPreviousClosePrice"]).replace(",", ""))
+                except ValueError:
+                    pass
+
     except Exception as e:
-        print(f"[ETF MOBILE API ERROR] {code}: {e}")
+        print(f"[ETF REST API ERROR] {code}: {e}")
 
     # 현재가와 NAV 기반 괴리율 계산
     if etf_info.get("current_price") and etf_info.get("nav"):

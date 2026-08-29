@@ -82,10 +82,11 @@ def build_factcheck_context(market_data: Dict[str, Any], fin_data: Dict[str, Any
 - 업종 분류: {market_data.get('sector_name', '주요 산업')}
 - 현재가: {p_str}원 (전일대비: {market_data.get('change_percent', 0)}%)
 - 52주 최고/최저: {safe_fmt(market_data.get('high_52w'))}원 / {safe_fmt(market_data.get('low_52w'))}원
-- 시가총액: {market_data.get('market_cap_formatted', 'N/A')}
+- 시가총액: {market_data.get('market_cap_formatted', 'N/A')} | 외국인소진율: {market_data.get('foreign_rate', 'N/A')}
 - PER: {market_data.get('pe_ratio', 'N/A')}배 | PBR: {market_data.get('pb_ratio', 'N/A')}배 | 배당수익률: {market_data.get('dividend_yield', 0)}%
 - EPS: {safe_fmt(market_data.get('eps'))}원 | BPS: {safe_fmt(market_data.get('bps'))}원 | 베타(β): {market_data.get('beta', 1.05)}
-- 데이터 기준일: {market_data.get('price_date', '2026-08-22')}
+- 데이터 출처: {market_data.get('data_source', '한국거래소(KRX) 공식 개방 API & 네이버 증권')}
+- 데이터 기준일: {market_data.get('price_date', '2026-08-29')}
 
 [2. DART 전자공시 & FnGuide 3~4개년 연간 공인 재무제표 (🚨 아래 수치로 '연간 재무분석 표'를 반드시 작성할 것)]
 {annual_text}
