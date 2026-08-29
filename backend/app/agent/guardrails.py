@@ -63,6 +63,15 @@ def build_factcheck_context(market_data: Dict[str, Any], fin_data: Dict[str, Any
             f"  * {row.get('year')}: 매출액 {row.get('revenue')}억원 | 영업이익 {row.get('op_income')}억원 | 당기순익 {row.get('net_income')}억원 | OPM {row.get('op_margin')} | ROE {row.get('roe')} | 부채비율 {row.get('debt_ratio')} | EPS {row.get('eps')}원 | PER {row.get('per')}"
         )
     annual_text = "\n".join(annual_rows)
+
+    # 최근 4개 분기 실적 팩트 테이블 포맷팅
+    quarter_rows = []
+    quarter_table = fin_data.get("quarterly_table", [])
+    for q in quarter_table:
+        quarter_rows.append(
+            f"  * {q.get('quarter')}: 매출액 {q.get('revenue')}억원 | 영업이익 {q.get('op_income')}억원 | 당기순익 {q.get('net_income')}억원 | OPM {q.get('op_margin')} | ROE {q.get('roe')} | 부채비율 {q.get('debt_ratio')} | EPS {q.get('eps')}원"
+        )
+    quarter_text = "\n".join(quarter_rows)
     
     summary_text = market_data.get('company_summary', '').strip()
     if not summary_text:
@@ -88,8 +97,13 @@ def build_factcheck_context(market_data: Dict[str, Any], fin_data: Dict[str, Any
 - 데이터 출처: {market_data.get('data_source', '한국거래소(KRX) 공식 개방 API & 네이버 증권')}
 - 데이터 기준일: {market_data.get('price_date', '2026-08-29')}
 
-[2. DART 전자공시 & FnGuide 3~4개년 연간 공인 재무제표 (🚨 아래 수치로 '연간 재무분석 표'를 반드시 작성할 것)]
+[2. DART 전자공시 & FnGuide 3~4개년 연간 및 2026년 최신 분기 공인 재무제표 (🚨 아래 수치로 '연간/분기 재무분석 표'를 반드시 작성할 것)]
+- 연간 결산 및 최신 공시 실적:
 {annual_text}
+
+- 최근 4개 분기 실적 추이:
+{quarter_text if quarter_text else "분기 실적 집계 중"}
+
 - 3개년 CAGR: 매출액 {fin_data.get('revenue_cagr_3y')} | 영업이익 {fin_data.get('op_income_cagr_3y')} | 순이익 {fin_data.get('net_income_cagr_3y')}
 - 듀퐁 분해 수치: ROE {fin_data.get('roe')}% = 순이익률 {fin_data.get('net_margin_latest')} × 자산회전율 {fin_data.get('asset_turnover')} × 재무레버리지 {fin_data.get('financial_leverage')}
 - 듀퐁 팩트 진단:
