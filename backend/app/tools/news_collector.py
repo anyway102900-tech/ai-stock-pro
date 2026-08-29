@@ -35,7 +35,7 @@ def fetch_whitelist_news(keyword: str, max_articles: int = 4, force_refresh: boo
     }
 
     # ── 1차: 네이버 증권 종목 전용 공식 뉴스 REST API (최고 신뢰도, 종목 맞춤형) ──
-    if code and code != keyword and len(code) == 6:
+    if code and len(code) == 6 and any(c.isdigit() for c in code):
         try:
             api_url = f"https://m.stock.naver.com/api/news/stock/{code}?pageSize=15&page=1"
             resp = requests.get(api_url, headers=headers, timeout=2.0)
