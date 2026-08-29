@@ -48,8 +48,8 @@ KNOWN_TICKERS: Dict[str, str] = {
     "포스코퓨처엠": "003670",
 
     # 💊 바이오 / 헬스케어
+    # 🧬 바이오 & 헬스케어
     "에임드바이오": "0009K0",
-    "케어젠": "214370",
     "삼성바이오로직스": "207940",
     "셀트리온": "068270",
     "알테오젠": "196170",
@@ -57,12 +57,11 @@ KNOWN_TICKERS: Dict[str, str] = {
     "한미약품": "128940",
     "리가켐바이오": "141080",
     "에이비엘바이오": "298380",
-
-    # 🛡️ 방산 / 조선 / 항공우주
-    "한화에어로스페이스": "012450",
-    "현대로템": "064350",
-    "한국항공우주": "047810",
-    "LIG넥스원": "079550",
+    "케어젠": "214370",
+    "디케이티": "290550",
+    "클래시스": "214150",
+    "리브스메드": "491000",
+    "SAMG엔터": "419530",
     "HD현대중공업": "329180",
     "한화오션": "042660",
     "삼성중공업": "010140",
@@ -167,6 +166,16 @@ def resolve_ticker(symbol_or_name: str) -> str:
     """종목명 또는 코드를 순수 종목코드(6자리)로 변환"""
     cleaned = symbol_or_name.strip()
 
+    # 1. 괄호 안의 6자리 코드 추출 (예: '에임드바이오 (0009K0)' -> '0009K0', '삼성전자(005930)' -> '005930')
+    code_in_paren = re.search(r'\(([0-9A-Za-z]{6})\)', cleaned)
+    if code_in_paren:
+        code_cand = code_in_paren.group(1).upper()
+        name_cand = re.sub(r'\([0-9A-Za-z]{6}\)', '', cleaned).strip()
+        if name_cand:
+            KNOWN_TICKERS[name_cand] = code_cand
+            REVERSE_KNOWN_TICKERS[code_cand] = name_cand
+        return code_cand
+
     if cleaned in KNOWN_TICKERS:
         return KNOWN_TICKERS[cleaned]
 
@@ -178,8 +187,9 @@ def resolve_ticker(symbol_or_name: str) -> str:
     if no_space in KNOWN_TICKERS:
         return KNOWN_TICKERS[no_space]
 
-    if len(cleaned) == 6 and cleaned.isalnum():
-        return cleaned
+    # 6자리 영문+숫자 혼합 또는 숫자 코드
+    if len(cleaned) == 6 and cleaned.isalnum() and any(c.isdigit() for c in cleaned):
+        return cleaned.upper()
 
     try:
         df = _get_krx_listing()
@@ -197,8 +207,8 @@ def resolve_ticker(symbol_or_name: str) -> str:
 
 
 def _is_krx_code(code: str) -> bool:
-    """KRX 종목코드 여부 판별 (6자리 숫자 또는 영문숫자 혼용)"""
-    return len(code) == 6 and code.isalnum() and not code.isupper()
+    """KRX 종목코드 여부 판별 (6자리 숫자 또는 영문숫자 혼용 0009K0 등)"""
+    return len(code) == 6 and code.isalnum() and any(c.isdigit() for c in code)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -256,7 +266,7 @@ def _fetch_krx_stock(code: str, fallback_name: str = "") -> Dict[str, Any]:
                 if item.get("key"): info_map[item.get("key")] = val_str
 
             deal_trend = int_data.get("dealTrendInfos", [{}])[0] if int_data.get("dealTrendInfos") else {}
-            close_p = deal_trend.get("closePrice") or info_map.get("현재가")
+            close_p = deal_trend.get("closePrice") or info_map.get("현재가") or info_map.get("lastClosePrice")
             if close_p:
                 p_clean = str(close_p).replace(",", "").strip()
                 if p_clean.lstrip("-").isdigit():
@@ -297,15 +307,26 @@ def _fetch_krx_stock(code: str, fallback_name: str = "") -> Dict[str, Any]:
             if bps_v != "N/A": bps = bps_v
             if dvr_v and dvr_v != "-": dividend_yield = dvr_v if "%" in dvr_v else f"{dvr_v}%"
 
-            # basic API 등락률
-            basic_resp = requests.get(f"https://m.stock.naver.com/api/stock/{code}/basic", headers=headers, timeout=1.0)
-            if basic_resp.status_code == 200:
-                b_data = basic_resp.json()
-                if b_data.get("fluctuationsRatio"):
-                    try: chg_pct = round(float(b_data["fluctuationsRatio"]), 2)
-                    except: pass
-            sector_name = f"{exchange} 상장 주식"
-            print(f"[KRX Naver OK] {code}({stock_name}): {cur_price}원 ({chg_pct:+.2f}%) 시총:{market_cap}")
+        # basic API 등락률 및 현재가/종목명/거래소 폴백 보강
+        basic_resp = requests.get(f"https://m.stock.naver.com/api/stock/{code}/basic", headers=headers, timeout=1.0)
+        if basic_resp.status_code == 200:
+            b_data = basic_resp.json()
+            if b_data.get("fluctuationsRatio"):
+                try: chg_pct = round(float(b_data["fluctuationsRatio"]), 2)
+                except: pass
+            if cur_price == "N/A" and b_data.get("closePrice"):
+                p_clean = str(b_data["closePrice"]).replace(",", "").strip()
+                if p_clean.lstrip("-").isdigit():
+                    cur_price = int(p_clean)
+            if (not stock_name or stock_name == code) and b_data.get("stockName"):
+                stock_name = b_data["stockName"]
+                KNOWN_TICKERS[stock_name] = code
+                REVERSE_KNOWN_TICKERS[code] = stock_name
+            if b_data.get("stockExchangeName"):
+                exchange = b_data["stockExchangeName"]
+
+        sector_name = f"{exchange} 상장 주식"
+        print(f"[KRX Naver OK] {code}({stock_name}): {cur_price}원 ({chg_pct:+.2f}%) 시총:{market_cap}")
 
     except Exception as e:
         print(f"[KRX Naver Unavailable on Cloud, Switching to Global Feed] {e}")
