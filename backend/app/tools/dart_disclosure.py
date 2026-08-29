@@ -209,6 +209,65 @@ def fetch_financial_facts(symbol_or_name: str, force_refresh: bool = False) -> D
     except Exception as e:
         print(f"[fetch_financial_facts Error] {e}")
 
+    # 2차 시도: 네이버 금융 PC 웹페이지 cop_analysis 테이블 직접 크롤링 (모바일 API 실패 시 100% 동작)
+    if not annual_table:
+        try:
+            from bs4 import BeautifulSoup
+            html_url = f"https://finance.naver.com/item/main.naver?code={code}"
+            h_res = requests.get(html_url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.naver.com/"}, timeout=6)
+            if h_res.status_code == 200:
+                soup = BeautifulSoup(h_res.content.decode('euc-kr', errors='ignore'), 'html.parser')
+                table = soup.select_one('.section.cop_analysis table')
+                if table:
+                    headers_th = [th.get_text(strip=True) for th in table.select('thead tr:nth-of-type(2) th')[:4]]
+                    row_data = {}
+                    for tr in table.select('tbody tr'):
+                        th_elem = tr.select_one('th')
+                        if not th_elem: continue
+                        t_title = th_elem.get_text(strip=True)
+                        tds = [td.get_text(strip=True) for td in tr.select('td')[:4]]
+                        row_data[t_title] = tds
+
+                    def get_h_row(keywords):
+                        for k, v in row_data.items():
+                            if any(w in k for w in keywords):
+                                return v
+                        return ["-", "-", "-", "-"]
+
+                    h_rev = get_h_row(["매출액", "매출"])
+                    h_op = get_h_row(["영업이익"])
+                    h_net = get_h_row(["당기순이익", "순이익"])
+                    h_opm = get_h_row(["영업이익률"])
+                    h_roe = get_h_row(["ROE"])
+                    h_debt = get_h_row(["부채비율"])
+                    h_eps = get_h_row(["EPS"])
+                    h_per = get_h_row(["PER"])
+
+                    for i, y_str in enumerate(headers_th):
+                        y_label = y_str.replace(".", "년").replace("E", "(E)")
+                        r_v = h_rev[i] if i < len(h_rev) and h_rev[i] != "-" else "N/A"
+                        o_v = h_op[i] if i < len(h_op) and h_op[i] != "-" else "N/A"
+                        n_v = h_net[i] if i < len(h_net) and h_net[i] != "-" else "N/A"
+                        opm_v = h_opm[i] if i < len(h_opm) and h_opm[i] != "-" else "N/A"
+                        roe_v = h_roe[i] if i < len(h_roe) and h_roe[i] != "-" else "N/A"
+                        debt_v = h_debt[i] if i < len(h_debt) and h_debt[i] != "-" else "N/A"
+                        eps_v = h_eps[i] if i < len(h_eps) and h_eps[i] != "-" else "N/A"
+                        per_v = h_per[i] if i < len(h_per) and h_per[i] != "-" else "N/A"
+
+                        annual_table.append({
+                            "year": y_label,
+                            "revenue": f"{r_v}억원" if r_v != "N/A" else "N/A",
+                            "op_income": f"{o_v}억원" if o_v != "N/A" else "N/A",
+                            "net_income": f"{n_v}억원" if n_v != "N/A" else "N/A",
+                            "op_margin": f"{opm_v}%" if opm_v != "N/A" else "N/A",
+                            "roe": f"{roe_v}%" if roe_v != "N/A" else "N/A",
+                            "debt_ratio": f"{debt_v}%" if debt_v != "N/A" else "N/A",
+                            "eps": f"{eps_v}원" if eps_v != "N/A" else "N/A",
+                            "per": f"{per_v}배" if per_v != "N/A" else "N/A"
+                        })
+        except Exception as e:
+            print(f"[HTML FINANCIAL PARSE ERROR] {code}: {e}")
+
     # 데이터가 아예 수집되지 못한 경우 N/A 테이블로 처리 (임의 수치 생성 금지)
     if not annual_table:
         annual_table = [

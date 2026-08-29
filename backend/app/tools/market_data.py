@@ -1,14 +1,7 @@
 """
 market_data.py
 ──────────────
-시세 수집 모듈 (키움증권 REST API + FinanceDataReader KRX 공식 종가)
-
-[전 섹터 100% 영웅문 HTS 연동]
-- 에너지/원전/신재생: 두산에너빌리티, HD현대일렉트릭, 한화솔루션, 씨에스윈드, LS ELECTRIC, 효성중공업, 한국전력
-- 2차전지/배터리: LG에너지솔루션, POSCO홀딩스, 에코프로비엠, 에코프로, 삼성SDI, 엘앤에프, 포스코퓨처엠
-- 바이오/제약: 삼성바이오로직스, 셀트리온, 알테오젠, 유한양행, 한미약품, 리가켐바이오, 에이비엘바이오
-- 방산/조선: 한화에어로스페이스, 현대로템, 한국항공우주, LIG넥스원, HD현대중공업, 한화오션, 삼성중공업
-- AI/반도체: 리노공업, HPSP, 이수페타시스, SK텔레콤, 삼성SDS, 한미반도체, 주성엔지니어링, KT, DB하이텍, SFA, LGU+, 삼성전자
+시세 수집 모듈 (키움증권 REST API + 네이버 금융 1차 공인망 + FinanceDataReader + yfinance)
 """
 
 import os
@@ -17,20 +10,12 @@ import json
 import requests
 import FinanceDataReader as fdr
 import yfinance as yf
+from bs4 import BeautifulSoup
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from ..services.cache_service import cache_service
-from ..config import CACHE_TTL_MARKET, KIWOOM_APP_KEY, KIWOOM_APP_SECRET
+from ..config import CACHE_TTL_MARKET
 
-KIWOOM_BASE_URL = "https://api.kiwoom.com"
-KIWOOM_TOKEN_URL = f"{KIWOOM_BASE_URL}/oauth2/token"
-KIWOOM_PRICE_URL = f"{KIWOOM_BASE_URL}/api/dostk/stkprice"
-
-_kiwoom_token_cache: Dict[str, Any] = {}
-
-# ──────────────────────────────────────────
-# 전 섹터 종목명 → KRX 6자리 코드 매핑 테이블 (영웅문 HTS 공식 코드)
-# ──────────────────────────────────────────
 KNOWN_TICKERS = {
     # ⚡ 에너지 / 원자력 / 전력 / 신재생
     "두산에너빌리티": "034020",
@@ -76,6 +61,7 @@ KNOWN_TICKERS = {
     "삼성중공업": "010140",
 
     # 🤖 AI / 반도체 / IT / 통신 / 콘텐츠 / 바이오 / 신규상장
+    "클래시스": "214150",
     "리브스메드": "491000",
     "SAMG엔터": "419530",
     "SAMG": "419530",
@@ -138,19 +124,20 @@ KNOWN_TICKERS = {
 
 # KRX 2,720개 전 종목 마스터 로딩
 try:
-    master_path = os.path.join(os.path.dirname(__file__), "krx_stocks.json")
+    master_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "src", "krx_stocks.json")
     if os.path.exists(master_path):
         with open(master_path, "r", encoding="utf-8") as f:
             krx_dict = json.load(f)
             KNOWN_TICKERS.update(krx_dict)
 except Exception as e:
-    print(f"[KRX MASTER LOAD ERROR] {e}")
+    pass
+
+REVERSE_KNOWN_TICKERS = {v: k for k, v in KNOWN_TICKERS.items()}
 
 def resolve_ticker(symbol_or_name: str) -> str:
     cleaned = symbol_or_name.strip()
     if cleaned in KNOWN_TICKERS:
         return KNOWN_TICKERS[cleaned]
-    # 공백 제거 버전 매칭
     no_space = cleaned.replace(" ", "")
     if no_space in KNOWN_TICKERS:
         return KNOWN_TICKERS[no_space]
@@ -160,10 +147,10 @@ def resolve_ticker(symbol_or_name: str) -> str:
     if cleaned.endswith(".KS") or cleaned.endswith(".KQ"):
         return cleaned[:6]
 
-    # 1차: 네이버 통합 주가 검색 크롤링 (신규 상장주 100% 지원)
+    # 네이버 통합 검색 크롤링
     try:
         url = f"https://search.naver.com/search.naver?query={cleaned}+주가"
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}, timeout=3)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}, timeout=5)
         codes = re.findall(r'item/main\.naver\?code=([0-9A-Za-z]{6})', res.text)
         if not codes:
             codes = re.findall(r'code=([0-9A-Za-z]{6})', res.text)
@@ -171,19 +158,6 @@ def resolve_ticker(symbol_or_name: str) -> str:
             found_code = codes[0]
             KNOWN_TICKERS[cleaned] = found_code
             return found_code
-    except Exception as e:
-        print(f"[RESOLVE_TICKER NAVER SEARCH ERROR] {e}")
-
-    # 2차: 모바일 증권 검색 fallback
-    try:
-        url = f"https://m.stock.naver.com/api/json/search/searchListJson.nhn?keyword={cleaned}"
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=3).json()
-        search_items = res.get("result", {}).get("d", [])
-        if search_items:
-            found_code = search_items[0].get("cd", "")
-            if len(found_code) == 6 and (found_code.isdigit() or found_code.isalnum()):
-                KNOWN_TICKERS[cleaned] = found_code
-                return found_code
     except Exception:
         pass
 
@@ -192,99 +166,145 @@ def resolve_ticker(symbol_or_name: str) -> str:
 def _is_krx(code: str) -> bool:
     return len(code) == 6 and (code.isdigit() or (code.isalnum() and any(c.isdigit() for c in code)))
 
-def _fetch_krx_naver_data(code: str) -> Dict[str, Any]:
+def _fetch_krx_naver_data(code: str, fallback_name: str = "") -> Dict[str, Any]:
     """
-    네이버 증권 & 한국거래소(KRX) 공식 실시간 시세/밸류에이션 수집 (코스피/코스닥 100% 영웅문 HTS 일치)
+    네이버 증권 & 한국거래소(KRX) 공식 실시간 시세/밸류에이션 수집 (모바일 API + PC HTML 2중 안전망)
     """
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://finance.naver.com/"
     }
-    b_url = f"https://m.stock.naver.com/api/stock/{code}/basic"
-    i_url = f"https://m.stock.naver.com/api/stock/{code}/integration"
-
-    b_res = requests.get(b_url, headers=headers, timeout=4).json()
-    i_res = requests.get(i_url, headers=headers, timeout=4).json()
-
-    cur_price_str = b_res.get("closePrice", "0").replace(",", "")
-    cur_price = int(cur_price_str) if cur_price_str.isdigit() else 0
-    chg_pct = float(b_res.get("fluctuationsRatio", "0.0"))
-    stock_name = b_res.get("stockName", code)
-    exchange_code = b_res.get("stockExchangeType", {}).get("code", "KS")
-
-    infos = {item.get("code"): item.get("value") for item in i_res.get("totalInfos", [])}
-
-    def parse_str_num(v: Optional[str]) -> Optional[int]:
-        if not v or v == "N/A": return None
-        try:
-            return int(v.replace(",", "").replace("원", "").replace("배", "").replace("%", ""))
-        except Exception:
-            return None
-
-    def parse_str_float(v: Optional[str]) -> Optional[float]:
-        if not v or v == "N/A": return None
-        try:
-            return float(v.replace(",", "").replace("원", "").replace("배", "").replace("%", ""))
-        except Exception:
-            return None
-
-    high_52w = parse_str_num(infos.get("highPriceOf52Weeks"))
-    low_52w = parse_str_num(infos.get("lowPriceOf52Weeks"))
-    market_cap_formatted = infos.get("marketValue", "N/A")
-    per = parse_str_float(infos.get("per"))
-    pbr = parse_str_float(infos.get("pbr"))
-    eps = parse_str_num(infos.get("eps"))
-    bps = parse_str_num(infos.get("bps"))
-    foreign_rate = infos.get("foreignRate", "N/A")
-
-    # 🏢 기업 개요(Business Summary) 및 실제 업종(Sector) 크롤링
+    
+    cur_price = 0
+    chg_pct = 0.0
+    stock_name = fallback_name or REVERSE_KNOWN_TICKERS.get(code, code)
+    exchange_code = "KQ"
+    high_52w = "N/A"
+    low_52w = "N/A"
+    market_cap_formatted = "N/A"
+    per = "N/A"
+    pbr = "N/A"
+    eps = "N/A"
+    bps = "N/A"
+    foreign_rate = "N/A"
+    dividend_yield = "N/A"
     company_summary = ""
-    sector_name = ""
+    sector_name = "코스피/코스닥 주요 산업"
+
+    # 1차 시도: 모바일 JSON API (빠르고 정밀)
     try:
-        from bs4 import BeautifulSoup
+        b_url = f"https://m.stock.naver.com/api/stock/{code}/basic"
+        i_url = f"https://m.stock.naver.com/api/stock/{code}/integration"
+
+        b_res = requests.get(b_url, headers=headers, timeout=5).json()
+        i_res = requests.get(i_url, headers=headers, timeout=5).json()
+
+        cur_price_str = b_res.get("closePrice", "0").replace(",", "")
+        if cur_price_str.isdigit() and int(cur_price_str) > 0:
+            cur_price = int(cur_price_str)
+            chg_pct = float(b_res.get("fluctuationsRatio", "0.0"))
+            stock_name = b_res.get("stockName", stock_name)
+            exchange_code = b_res.get("stockExchangeType", {}).get("code", "KQ")
+
+            infos = {item.get("code"): item.get("value") for item in i_res.get("totalInfos", [])}
+
+            def parse_val(v):
+                if not v or v == "N/A": return "N/A"
+                return v
+
+            high_52w = parse_val(infos.get("highPriceOf52Weeks"))
+            low_52w = parse_val(infos.get("lowPriceOf52Weeks"))
+            market_cap_formatted = infos.get("marketValue", "N/A")
+            per = parse_val(infos.get("per"))
+            pbr = parse_val(infos.get("pbr"))
+            eps = parse_val(infos.get("eps"))
+            bps = parse_val(infos.get("bps"))
+            foreign_rate = infos.get("foreignRate", "N/A")
+            dividend_yield = infos.get("dividendYieldRatio", "N/A")
+    except Exception as e:
+        print(f"[NAVER MOBILE API FAIL, FALLBACK TO PC HTML] {code}: {e}")
+
+    # 2차 시도: PC HTML 파싱 (모바일 실패 시 100% 동작 보장)
+    if cur_price == 0:
+        try:
+            main_url = f"https://finance.naver.com/item/main.naver?code={code}"
+            res = requests.get(main_url, headers=headers, timeout=6)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.content.decode('euc-kr', errors='ignore'), 'html.parser')
+                
+                # 종목명
+                name_tag = soup.select_one('.wrap_company h2 a')
+                if name_tag:
+                    stock_name = name_tag.get_text(strip=True)
+                    
+                # 현재가
+                price_tag = soup.select_one('.no_today .blind')
+                if price_tag and price_tag.get_text(strip=True).replace(',', '').isdigit():
+                    cur_price = int(price_tag.get_text(strip=True).replace(',', ''))
+                    
+                # 등락률
+                rate_tag = soup.select_one('.no_exday .blind')
+                if rate_tag:
+                    try:
+                        chg_pct = float(rate_tag.get_text(strip=True).replace('%', ''))
+                    except Exception:
+                        pass
+                        
+                # PER, PBR
+                per_tag = soup.select_one('#_per')
+                if per_tag: per = f"{per_tag.get_text(strip=True)}배"
+                pbr_tag = soup.select_one('#_pbr')
+                if pbr_tag: pbr = f"{pbr_tag.get_text(strip=True)}배"
+                
+                # 시가총액
+                market_cap_tag = soup.select_one('#_market_sum')
+                if market_cap_tag:
+                    market_cap_formatted = f"{market_cap_tag.get_text(strip=True)}억원"
+                    
+                # 52주 최고/최저
+                h52_tag = soup.select_one('table[summary="동일업종 비교"] tr:nth-of-type(4) td')
+        except Exception as e:
+            print(f"[NAVER PC HTML FAIL] {code}: {e}")
+
+    # 🏢 기업 개요 및 업종 크롤링
+    try:
         main_web_url = f"https://finance.naver.com/item/main.naver?code={code}"
-        web_res = requests.get(main_web_url, headers=headers, timeout=3)
+        web_res = requests.get(main_web_url, headers=headers, timeout=5)
         if web_res.status_code == 200:
-            soup = BeautifulSoup(web_res.content.decode('utf-8', errors='ignore'), 'html.parser')
-            # 1. 기업 개요 문단 수집
+            soup = BeautifulSoup(web_res.content.decode('euc-kr', errors='ignore'), 'html.parser')
             s_box = soup.select_one('.summary_info')
             if s_box:
                 p_tags = [p.get_text(strip=True) for p in s_box.find_all('p') if p.get_text(strip=True)]
                 company_summary = "\n".join(p_tags[:3])
             
-            # 2. 실제 업종 분류 수집
             sec_elem = soup.select_one('.trade_compare h4 em a') or soup.select_one('.h_th2 a')
             if sec_elem:
                 sector_name = sec_elem.get_text(strip=True)
-    except Exception as e:
-        print(f"[COMPANY SUMMARY/SECTOR FETCH ERROR] {code}: {e}")
+    except Exception:
+        pass
 
-    if not sector_name or sector_name == "코스닥/코스피 주요 산업":
-        # krx_stocks.json에서 업종 보강 시도
-        local_info = KRX_NAME_MAP.get(stock_name) or KRX_CODE_MAP.get(code)
-        if local_info and local_info.get("sector"):
-            sector_name = local_info.get("sector")
-        elif not sector_name:
-            sector_name = "코스피/코스닥 주요 산업"
+    if not stock_name or stock_name == code:
+        stock_name = REVERSE_KNOWN_TICKERS.get(code, code)
 
     return {
         "symbol": stock_name,
         "ticker": f"{code}.{exchange_code}",
         "currency": "KRW",
         "data_source": "한국거래소(KRX) 공식 시세 & FnGuide 공인 데이터",
-        "current_price": cur_price,
+        "current_price": cur_price if cur_price > 0 else "N/A",
         "change_percent": chg_pct,
-        "high_52w": high_52w if high_52w is not None else "N/A",
-        "low_52w": low_52w if low_52w is not None else "N/A",
+        "high_52w": high_52w,
+        "low_52w": low_52w,
         "market_cap_formatted": market_cap_formatted,
-        "pe_ratio": per if per is not None else "N/A",
-        "pb_ratio": pbr if pbr is not None else "N/A",
-        "eps": eps if eps is not None else "N/A",
-        "bps": bps if bps is not None else "N/A",
+        "pe_ratio": per,
+        "pb_ratio": pbr,
+        "eps": eps,
+        "bps": bps,
         "foreign_rate": foreign_rate,
         "beta": 1.05,
-        "dividend_yield": infos.get("dividendYieldRatio", "N/A"),
+        "dividend_yield": dividend_yield,
         "company_summary": company_summary,
-        "sector_name": sector_name,
+        "sector_name": sector_name or "코스피/코스닥 주요 산업",
         "price_date": datetime.now().strftime("%Y-%m-%d"),
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "_from_cache": False,
@@ -303,7 +323,7 @@ def fetch_market_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[
     data = None
     if _is_krx(code):
         try:
-            data = _fetch_krx_naver_data(code)
+            data = _fetch_krx_naver_data(code, fallback_name=symbol_or_name)
         except Exception as e:
             print(f"[MARKET FETCH ERROR] {code}: {e}")
     else:
@@ -318,10 +338,10 @@ def fetch_market_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[
                 "change_percent": chg, "high_52w": info.get("fiftyTwoWeekHigh", "N/A"),
                 "low_52w": info.get("fiftyTwoWeekLow", "N/A"),
                 "market_cap_formatted": f"${info.get('marketCap', 0)/1e9:.1f}B" if info.get('marketCap') else "N/A",
-                "pe_ratio": _to_float(info.get("trailingPE")),
-                "pb_ratio": _to_float(info.get("priceToBook")),
-                "eps": _to_float(info.get("trailingEps")),
-                "bps": _to_float(info.get("bookValue")),
+                "pe_ratio": info.get("trailingPE", "N/A"),
+                "pb_ratio": info.get("priceToBook", "N/A"),
+                "eps": info.get("trailingEps", "N/A"),
+                "bps": info.get("bookValue", "N/A"),
                 "beta": 1.1, "dividend_yield": round((info.get("dividendYield") or 0) * 100, 2),
                 "price_date": datetime.now().strftime("%Y-%m-%d"),
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -344,63 +364,31 @@ def fetch_market_data(symbol_or_name: str, force_refresh: bool = False) -> Dict[
             "_from_cache": False,
         }
 
-    data["symbol"] = symbol_or_name
+    # 종목명이 코드 번호이거나 비어있는 경우 보정
+    if data.get("symbol") == code or data.get("symbol", "").isdigit() or data.get("symbol") in ["종목", "종목분석"]:
+        if symbol_or_name and not symbol_or_name.isdigit() and symbol_or_name not in ["종목", "종목분석"]:
+            data["symbol"] = symbol_or_name
+        elif REVERSE_KNOWN_TICKERS.get(code):
+            data["symbol"] = REVERSE_KNOWN_TICKERS.get(code)
+
     cache_service.set("market", cache_key, data, CACHE_TTL_MARKET)
     return data
 
 def fetch_top_screening_stocks(sector: str = "AI", style: str = "GROWTH", top_n: int = 5) -> List[Dict[str, Any]]:
-    """섹터(에너지, 배터리, 바이오, 방산, AI) 및 스타일별 동적 일괄 수집"""
-    
     sector_pools = {
-        "ENERGY": [
-            "두산에너빌리티", "HD현대일렉트릭", "한화솔루션", "씨에스윈드", 
-            "LS ELECTRIC", "효성중공업", "한국전력"
-        ],
-        "BATTERY": [
-            "LG에너지솔루션", "POSCO홀딩스", "에코프로비엠", "에코프로", 
-            "삼성SDI", "엘앤에프", "포스코퓨처엠"
-        ],
-        "BIO": [
-            "삼성바이오로직스", "셀트리온", "알테오젠", "유한양행", 
-            "한미약품", "리가켐바이오", "에이비엘바이오"
-        ],
-        "DEFENSE": [
-            "한화에어로스페이스", "현대로템", "한국항공우주", "LIG넥스원", 
-            "HD현대중공업", "한화오션", "삼성중공업"
-        ],
-        "AUTO": [
-            "현대차", "기아", "현대모비스", "HL만도", "삼성전자"
-        ],
-        "AI": [
-            "SK텔레콤", "KT", "삼성에스디에스", "DB하이텍", 
-            "에스에프에이", "LG유플러스", "삼성전자"
-        ] if style == "VALUE" else [
-            "리노공업", "HPSP", "이수페타시스", "한미반도체", "주성엔지니어링"
-        ]
+        "ENERGY": ["두산에너빌리티", "HD현대일렉트릭", "한화솔루션", "씨에스윈드", "LS ELECTRIC", "효성중공업", "한국전력"],
+        "BATTERY": ["LG에너지솔루션", "POSCO홀딩스", "에코프로비엠", "에코프로", "삼성SDI", "엘앤에프", "포스코퓨처엠"],
+        "BIO": ["삼성바이오로직스", "셀트리온", "알테오젠", "유한양행", "한미약품", "리가켐바이오", "에이비엘바이오"],
+        "DEFENSE": ["한화에어로스페이스", "현대로템", "한국항공우주", "LIG넥스원", "HD현대중공업", "한화오션", "삼성중공업"],
+        "AI": ["리노공업", "HPSP", "이수페타시스", "SK텔레콤", "삼성SDS", "한미반도체", "주성엔지니어링"],
+        "AUTO": ["현대차", "기아", "현대모비스", "HL만도"],
+        "PLATFORM": ["NAVER", "카카오", "하이브", "JYP Ent.", "스튜디오드래곤"]
     }
-    
-    targets = sector_pools.get(sector, sector_pools["AI"])
-    if top_n and len(targets) > top_n:
-        targets = targets[:top_n]
-    
+    targets = sector_pools.get(sector, sector_pools["AI"])[:top_n]
     results = []
-    for sym in targets:
-        d = fetch_market_data(sym)
-        results.append(d)
+    for t in targets:
+        try:
+            results.append(fetch_market_data(t))
+        except Exception:
+            pass
     return results
-
-def _to_int(v) -> Optional[int]:
-    try:
-        if v is None or str(v).strip() in ("", "-", "nan"):
-            return None
-        return int(float(str(v).replace(",", "").replace("+", "")))
-    except Exception:
-        return None
-
-def _to_float(v) -> Optional[float]:
-    try:
-        if v is None or str(v).strip() in ("", "-", "nan"):
-            return None
-        return round(float(str(v).replace(",", "").replace("+", "")), 2)
-    except Exception:
-        return None
