@@ -14,7 +14,7 @@ const QUICK_STOCKS = [
 
 export default function PromptInput({ onExecute, isAnalyzing }) {
   const [prompt, setPrompt] = useState('클래시스 (214150)');
-  const [forceRefresh, setForceRefresh] = useState(false);
+  const [forceRefresh, setForceRefresh] = useState(true);
   const [suggestions, setSuggestions] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
