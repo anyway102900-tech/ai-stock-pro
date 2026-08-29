@@ -24,7 +24,7 @@ export default function App() {
   const [reportCount, setReportCount] = useState(0);
   const [currentPromptStock, setCurrentPromptStock] = useState('');
 
-  const apiBaseUrl = import.meta.env.VITE_API_URL || '';
+  const apiBaseUrl = import.meta.env.VITE_API_URL || 'https://ai-stock-backend-4d3m.onrender.com';
 
   // 저장된 리포트 개수 조회
   const updateReportCount = async () => {
@@ -70,12 +70,12 @@ export default function App() {
     // 1. 프롬프트 텍스트에서 1차 종목명/코드 추출
     const pText = fallbackPrompt || currentPromptStock;
     if (pText) {
-      const codeInPrompt = pText.match(/\b([0-9]{6})\b/);
+      const codeInPrompt = pText.match(/\b([0-9A-Za-z]{6})\b/);
       if (codeInPrompt && CODE_TO_NAME[codeInPrompt[1]]) {
         ticker = codeInPrompt[1];
         symbol = CODE_TO_NAME[codeInPrompt[1]];
       } else {
-        const nameMatch = pText.match(/([가-힣A-Za-z0-9]+)(?:\s*\(([0-9]{6})\))?/);
+        const nameMatch = pText.match(/([가-힣A-Za-z0-9]+)(?:\s*\(([0-9A-Za-z]{6})\))?/);
         if (nameMatch && nameMatch[1] && nameMatch[1].length > 1) {
           symbol = nameMatch[1];
           if (nameMatch[2]) ticker = nameMatch[2];
@@ -88,7 +88,7 @@ export default function App() {
     if (titleMatch) {
       const rawSym = titleMatch[1].trim();
       const rawTick = titleMatch[2] ? titleMatch[2].trim() : '';
-      if (/^\d{6}$/.test(rawSym) && CODE_TO_NAME[rawSym]) {
+      if (/^[0-9A-Za-z]{6}$/.test(rawSym) && CODE_TO_NAME[rawSym]) {
         symbol = CODE_TO_NAME[rawSym];
         ticker = rawSym;
       } else if (rawSym !== '종목분석' && rawSym !== '종목') {
@@ -98,7 +98,7 @@ export default function App() {
     }
 
     // 3. 종목코드만 있는 경우 한글 종목명 역변환
-    if (/^\d{6}$/.test(symbol) && CODE_TO_NAME[symbol]) {
+    if (/^[0-9A-Za-z]{6}$/.test(symbol) && CODE_TO_NAME[symbol]) {
       ticker = symbol;
       symbol = CODE_TO_NAME[symbol];
     }
